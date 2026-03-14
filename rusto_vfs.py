@@ -151,7 +151,7 @@ def run_cargo(cmd: str, args: list[str]):
             "--manifest-path",
             str(PROJECT_DIRECTORY.joinpath("Cargo.toml")),
         ] + args
-        print(">>> RUN:", all_args)
+        print(">>> RUN:", cmd, args)
         with empty_stdin() as stdin:
             p = subprocess.run(all_args, capture_output=True, text=True, stdin=stdin)
         return {"exitcode": p.returncode, "stdout": p.stdout, "stderr": p.stderr}
