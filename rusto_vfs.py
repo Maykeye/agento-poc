@@ -161,13 +161,18 @@ def run_cargo(cmd: str, args: list[str]):
 
 
 def cargo_add_crate(args: Annotated[list, "Arguments that go after `cargo add`"]):
-    """Execute `cargo add (args)` with additional provided to add packages."""
+    """Execute `cargo add (args)` with additionaly provided args to add packages."""
     return run_cargo("add", args)
 
 
 def cargo_check():
     """Execute `cargo check` to check if project(and its tests) compiles fine"""
     return run_cargo("check", ["--tests"])
+
+
+def cargo_test(args: Annotated[list, "Arguments that go after `cargo test`"]):
+    """Execute `cargo test (args)` with additionals provided args to test."""
+    return run_cargo("test", args)
 
 
 def edit_file(

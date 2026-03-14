@@ -31,12 +31,13 @@ class AgencyNode:
         llm.add_tool(rusto_vfs.delete_file)
         llm.add_tool(rusto_vfs.mkdir)
         llm.add_tool(rusto_vfs.rmdir)
-        llm.add_tool(rusto_vfs.cargo_add)
+        llm.add_tool(rusto_vfs.cargo_add_crate)
 
     def _llm_reading(self, llm: LLM):
         llm.add_tool(rusto_vfs.read_file)
         llm.add_tool(rusto_vfs.ls)
         llm.add_tool(rusto_vfs.cargo_check)
+        llm.add_tool(rusto_vfs.cargo_test)
 
     def simple(self, user_prompt: str):
         llm = self.llm
@@ -59,12 +60,17 @@ def main():
 Preparation:
 * Read the current DESIGN.md to know what project about and common style for e.g. testsing.
 
-* New task:
+Completed tasks: (Given for immediate Context)
 * utils.rs: Create weighted sampler
-    * Typedef "Xoshiro128PlusPlus" as Rng.
-    * Create a new function `random_weighted(rng: &mut Rng, weights: &[usize]) -> usize`
+    * Typedef "Xoshiro128PlusPlus" of rand to local type `Random`
+    * Create a new function `random_weighted(rng: &mut Random, weights: &[usize]) -> usize`
         that returns index of random value depending on weights
-            E.g. if there are three weights, weights=vec!(0,1,10), then value=0 will not be returned, value=2 will be returned 10 times more often than 1.
+        E.g. if there are three weights, weights=vec!(0,1,10), then value=0 will not be returned, value=2 will be returned 10 times more often than 1.
+    * Include utils from main.
+
+* Edit random_weighted to return Option<usize> (and edit tests too)
+On: fn test_random_weighted_all_same_weights().
+
 """,
         )
     )
