@@ -140,11 +140,9 @@ def write_file(
     return f">>> OK: WRITTEN {path} ({sz} bytes, {len(lines)} lines) \n>>> FIRST WRITTEN LINE: {first_line}"
 
 
-def cargo_add(args: Annotated[list, "Arguments that go after `cargo` `add`"]):
-    """Execute cargo add to add packages"""
-    # TODO: tee me
+def run_cargo(args: list[str]):
     try:
-
+        # TODO: tee me
         all_args = [
             "cargo",
             "--color",
@@ -159,7 +157,17 @@ def cargo_add(args: Annotated[list, "Arguments that go after `cargo` `add`"]):
         return {"exitcode": p.returncode, "stdout": p.stdout, "stderr": p.stderr}
     except Exception as ex:
         print(ex)
-        return {"cargo_add": "error", "message": str(ex)}
+        return {"error": str(ex)}
+
+
+def cargo_add(args: Annotated[list, "Arguments that go after `cargo` `add`"]):
+    """Execute cargo add to add packages"""
+    return run_cargo(["add"] + args)
+
+
+def cargo_check():
+    """Execute `cargo check` to check if project(and its tests) compiles fine"""
+    return run_cargo(["check"])
 
 
 def edit_file(

@@ -31,10 +31,12 @@ class AgencyNode:
         llm.add_tool(rusto_vfs.delete_file)
         llm.add_tool(rusto_vfs.mkdir)
         llm.add_tool(rusto_vfs.rmdir)
+        llm.add_tool(rusto_vfs.cargo_add)
 
     def _llm_reading(self, llm: LLM):
         llm.add_tool(rusto_vfs.read_file)
         llm.add_tool(rusto_vfs.ls)
+        llm.add_tool(rusto_vfs.cargo_check)
 
     def simple(self, user_prompt: str):
         llm = self.llm
@@ -57,12 +59,12 @@ def main():
 Preparation:
 * Read the current DESIGN.md to know what project about and common style for e.g. testsing.
 
-Main Tasks:
-* Edit structures, DO NOT CREATE CODE (there should be exactly zero fn)
-* Edit `world.rs`: Let's prepare WorldChunk generation
-    * Create a helper function `ore_generation_weight`.
-    The function given a y-level shall return an array with "weight" of each ore, i.e. how likely it is will be generated.
-    ("weight" means sampling). Project currently doesn't use `rand` package, so add it.
+* New task:
+* utils.rs: Create weighted sampler
+    * Typedef "Xoshiro128PlusPlus" as Rng.
+    * Create a new function `random_weighted(rng: &mut Rng, weights: &[usize]) -> usize`
+        that returns index of random value depending on weights
+            E.g. if there are three weights, weights=vec!(0,1,10), then value=0 will not be returned, value=2 will be returned 10 times more often than 1.
 """,
         )
     )
