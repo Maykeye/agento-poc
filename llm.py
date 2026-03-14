@@ -181,7 +181,7 @@ class LLM:
         if finish_reason == "tool_calls" and do_tool_calls:
             for call in res.tool_calls:
                 tool_callback = self.tools_callbacks[call.function]
-                print(f">>> ARGS: `{call.arguments[:200]}`")
+                print(f">>> FUNC: {call.function[:32]} ARGS: `{call.arguments[:200]}`")
                 try:
                     args = json.loads(call.arguments)
                     result = tool_callback(**args)
