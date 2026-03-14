@@ -87,6 +87,20 @@ def delete_file(path: Annotated[str, "File to delete"]):
     return {path: "ok", "desc": f"File deleted"}
 
 
+def mkdir(path: Annotated[str, "Directory to make"]):
+    """Create a new directory with parents(i.e. if creation of `foo/bar/` is asked, but `foo/` doesnt't exist, it will be created so `bar` can be created inside)"""
+    p = real_path(path)
+
+    if p.exists() and p.is_dir():
+        return {path: "directory", "info": f"directory already exists"}
+
+    if p.exists():
+        return {path: "error", "error": f"exists but not a directory"}
+
+    p.mkdir(parents=True, exist_ok=True)
+    return {path: "created", "info": f"Created directory"}
+
+
 def rmdir(path: Annotated[str, "File to delete"]):
     """Remove the empty directory. Directory must be empty or error will occur"""
     p = real_path(path)

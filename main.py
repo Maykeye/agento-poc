@@ -1,9 +1,8 @@
 #!/usr/bin/env python
-import os
-from typing import Callable, Optional
+from typing import Optional
 
 from llm import LLM
-from utils import read_text, data_tag, commit_files, extract_tag
+from utils import read_text, data_tag
 import rusto_vfs
 
 
@@ -30,6 +29,7 @@ class AgencyNode:
         llm.add_tool(rusto_vfs.write_file)
         llm.add_tool(rusto_vfs.edit_file)
         llm.add_tool(rusto_vfs.delete_file)
+        llm.add_tool(rusto_vfs.mkdir)
         llm.add_tool(rusto_vfs.rmdir)
 
     def _llm_reading(self, llm: LLM):
