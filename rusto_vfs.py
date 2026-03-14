@@ -1,9 +1,9 @@
-from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Annotated
 from pathlib import Path
 import logging
 import os
+import subprocess
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
@@ -28,6 +28,11 @@ def real_path(project_path: str | Path):
         return path
     else:
         raise ValueError(f"{project_path} is out of bounds of project directory")
+
+
+def empty_stdin():
+    """Helper function to disable stdin in subprocesses"""
+    return open("/dev/null")
 
 
 def ls(path: Annotated[str, "Path to get listing(use '.' for listing base path)"]):
@@ -133,6 +138,28 @@ def write_file(
     lines = content.splitlines()
     first_line = lines[0] if content else ""
     return f">>> OK: WRITTEN {path} ({sz} bytes, {len(lines)} lines) \n>>> FIRST WRITTEN LINE: {first_line}"
+
+
+def cargo_add(args: Annotated[list, "Arguments that go after `cargo` `add`"]):
+    """Execute cargo add to add packages"""
+    # TODO: tee me
+    try:
+
+        all_args = [
+            "cargo",
+            "--color",
+            "never",
+            "add",
+            "--manifest-path",
+            str(PROJECT_DIRECTORY.joinpath("Cargo.toml")),
+        ] + args
+        print(">>> RUN:", all_args)
+        with empty_stdin() as stdin:
+            p = subprocess.run(all_args, capture_output=True, text=True, stdin=stdin)
+        return {"exitcode": p.returncode, "stdout": p.stdout, "stderr": p.stderr}
+    except Exception as ex:
+        print(ex)
+        return {"cargo_add": "error", "message": str(ex)}
 
 
 def edit_file(

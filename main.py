@@ -58,16 +58,12 @@ Preparation:
 * Read the current DESIGN.md to know what project about and common style for e.g. testsing.
 
 Main Tasks:
-* Generate `world.rs` module and include it from main.rs
-    * Make struct World that consist of world chunks (chunk pos -> WorldChunk)
-        * chunk pos is made from u32
-    * WorldChunk contains information about terrain (ore type and its current health).
-    * Create only structures for World/WorldChunk.
-        * DO NOT CREATE CODE (there should be exactly zero fn)
-* Create src/tests/test_world.rs. 
-    * Create test_dummy now that just `assert_eq!(1,2)`
-* DESIGN.md has draft version of `struct World` without mention of chunk. Once you'll implement source code, update DESIGN.md
-            """,
+* Edit structures, DO NOT CREATE CODE (there should be exactly zero fn)
+* Edit `world.rs`: Let's prepare WorldChunk generation
+    * Create a helper function `ore_generation_weight`.
+    The function given a y-level shall return an array with "weight" of each ore, i.e. how likely it is will be generated.
+    ("weight" means sampling). Project currently doesn't use `rand` package, so add it.
+""",
         )
     )
 
