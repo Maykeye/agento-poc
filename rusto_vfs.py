@@ -30,6 +30,36 @@ def real_path(project_path: str | Path):
         raise ValueError(f"{project_path} is out of bounds of project directory")
 
 
+def ls(path: Annotated[str, "Path to get listing(use '.' for listing base path)"]):
+    """Read a file. If file read ok, its content will be returned as plain-text between `=== CONTENT START ===` and `=== CONTENT END ===`"""
+    p = real_path(path)
+    if p.exists() and not p.is_dir():
+        return {path: "error", "error": f"Path exists, but it is not a directory"}
+    if not p.exists():
+        return {path: "error", "error": f"File does't exist"}
+
+    entries = [x for x in p.glob("*")]
+    entries.sort()
+
+    out = []
+    if p != real_path("."):
+        out.append(" Directory: ..")
+    for entry in entries:
+        desc = ""
+        if entry.is_file():
+            desc += " File: "
+
+        if entry.is_dir():
+            desc += " Directory: "
+
+        desc += entry.name
+        if entry.is_file():
+            desc += f" (Size: {os.path.getsize(entry)} bytes)"
+        out.append(desc)
+
+    return f"LISTING: {path}\n" + "\n".join(out) + f"\n({len(out)} entries)"
+
+
 def read_file(path: Annotated[str, "Project path to read from"]):
     """Read a file. If file read ok, its content will be returned as plain-text between `=== CONTENT START ===` and `=== CONTENT END ===`"""
     p = real_path(path)
@@ -41,6 +71,37 @@ def read_file(path: Annotated[str, "Project path to read from"]):
 
     text = p.read_text()
     return f">>> OK: READ {path}\n>>> === CONTENT START ===\n{text}\n>>> === CONTENT END ==="
+
+
+def delete_file(path: Annotated[str, "File to delete"]):
+    """Delete the file"""
+    p = real_path(path)
+
+    if p.exists() and not p.is_file():
+        return {path: "error", "error": f"File exists, but it is not a file"}
+
+    if not p.exists():
+        return {path: "error", "error": f"File does't exist"}
+
+    p.unlink()
+    return {path: "ok", "desc": f"File deleted"}
+
+
+def rmdir(path: Annotated[str, "File to delete"]):
+    """Remove the empty directory. Directory must be empty or error will occur"""
+    p = real_path(path)
+
+    if p.exists() and not p.is_dir():
+        return {path: "error", "error": f"Path exists, but it is not a directory"}
+    if not p.exists():
+        return {path: "error", "error": f"File does't exist"}
+
+    data = [x for x in p.glob("*")]
+    if data:
+        return {path: "error", "error": f"Directory is not empty"}
+
+    p.rmdir()
+    return {path: "ok", "desc": f"File deleted"}
 
 
 def write_file(
@@ -55,8 +116,9 @@ def write_file(
 
     p.write_text(content)
     sz = os.path.getsize(p)
-    first_line = content.splitlines()[0] if content else ""
-    return f">>> OK: WRITTEN {path} ({sz} bytes) \n>>> FIRST LINE WRITTEN: {first_line}"
+    lines = content.splitlines()
+    first_line = lines[0] if content else ""
+    return f">>> OK: WRITTEN {path} ({sz} bytes, {len(lines)} lines) \n>>> FIRST WRITTEN LINE: {first_line}"
 
 
 def edit_file(
@@ -86,6 +148,3 @@ def edit_file(
         path: "ok",
         "desc": f"Chunk replaced from `{repr(replace_from[:32])}`... to `{repr(replace_with[:32])}`...",
     }
-
-
-# print(split_file("src/main.rs"))

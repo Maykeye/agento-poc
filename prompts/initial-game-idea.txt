@@ -1,0 +1,9 @@
+Let's make design plan for implementing mining game in rust using ratatui: the deeper we move, the harder ore there is. 
+
+But more valuable resources there are. Ideas to play around: 
+we can rewind time to next day/planet to reset terrain, buy dynamites, get new pickaxes, buy new weapons. 
+Genre is mining, nothing more. 
+
+Dig, dig, dig. More detailed game ideas is up to you, define and write them into ./DESIGN.md
+
+Current stage is game design idea: i.e. no need to implement anything, write design plan only
