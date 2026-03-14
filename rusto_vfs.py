@@ -140,14 +140,14 @@ def write_file(
     return f">>> OK: WRITTEN {path} ({sz} bytes, {len(lines)} lines) \n>>> FIRST WRITTEN LINE: {first_line}"
 
 
-def run_cargo(args: list[str]):
+def run_cargo(cmd: str, args: list[str]):
     try:
         # TODO: tee me
         all_args = [
             "cargo",
             "--color",
             "never",
-            "add",
+            cmd,
             "--manifest-path",
             str(PROJECT_DIRECTORY.joinpath("Cargo.toml")),
         ] + args
@@ -160,14 +160,14 @@ def run_cargo(args: list[str]):
         return {"error": str(ex)}
 
 
-def cargo_add(args: Annotated[list, "Arguments that go after `cargo` `add`"]):
-    """Execute cargo add to add packages"""
-    return run_cargo(["add"] + args)
+def cargo_add_crate(args: Annotated[list, "Arguments that go after `cargo add`"]):
+    """Execute `cargo add (args)` with additional provided to add packages."""
+    return run_cargo("add", args)
 
 
 def cargo_check():
     """Execute `cargo check` to check if project(and its tests) compiles fine"""
-    return run_cargo(["check"])
+    return run_cargo("check", ["--tests"])
 
 
 def edit_file(
