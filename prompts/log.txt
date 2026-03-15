@@ -1,0 +1,97 @@
+Preparation:
+* Read the current DESIGN.md to know what project about and common style for e.g. testsing.
+
+Main Tasks:
+====================================================================
+* Generate `world.rs` module and include it from main.rs
+    * Make struct World that consist of world chunks (chunk pos -> WorldChunk)
+        * chunk pos is made from u32
+    * WorldChunk contains information about terrain (ore type and its current health).
+    * Create only structures for World/WorldChunk.
+        * DO NOT CREATE CODE (there should be exactly zero fn)
+* Create src/tests/test_world.rs. 
+    * Create test_dummy now that just `assert_eq!(1,2)`
+* DESIGN.md has draft version of `struct World` without mention of chunk. Once you'll implement source code, update DESIGN.md
+===========================================
+* Edit structures, DO NOT CREATE CODE (there should be exactly zero fn)
+* Edit `world.rs`:
+    * Edit structures for World/WorldChunk.
+    * World must consist of chunks
+    * Each chunk contains N x N ores (2D array)
+        * This N is defined by world's chunk_size: u32.
+
+* DESIGN.md has draft version of `struct World`. Keep it up to date.
+  ===============================================
+* Edit structures, DO NOT CREATE CODE (there should be exactly zero fn)
+* Edit `world.rs`:
+    * ChunkPosition uses i32. Change it to u32.
+    * WorldChunk uses nested vector. Use a single Vec (idea it'll contain N x N blocks)
+* DESIGN.md has draft version of `struct World` etc. Keep it up to date.
+  ====================
+* Edit structures, DO NOT CREATE CODE (there should be exactly zero fn)
+* Edit `world.rs`: Generalization of ore.
+    Right now ores are represented by enum.
+    * Remove enum.
+    * Declare OreDefinition struct that for now contains only name of the ore
+    * Put vector of OreDefinition into World
+    * Instead of enum OreType use newtype OreTypeId
+* Keep DESIGN.md up to sync
+  ====================
+* Keep DESIGN.md up to sync with the current source code: DESIGN.md uses enum of OreType. Replace it with updated ore information
+  ====================
+* Edit DESIGN.md: remove all definitions and mentions of struct.
+  ====================
+* utils.rs: Create weighted sampler
+    * Typedef "Xoshiro128PlusPlus" of rand to local type `Random`
+    * Create a new function `random_weighted(rng: &mut Random, weights: &[usize]) -> usize`
+        that returns index of random value depending on weights
+        E.g. if there are three weights, weights=vec!(0,1,10), then value=0 will not be returned, value=2 will be returned 10 times more often than 1.
+    * Include utils from main.
+* Edit random_weighted to return Option<usize> (and edit tests too)
+* Run tests and fix them (eg edit weights so significantly that chance to fail is negligible)
+  ====================
+New tasks, test to edit:
+* `fn test_random_weighted_zero_weight()` uses weight 10. Increase it to million at least
+* DO NOT EDIT OTHER TESTS
+  ====================
+Completed tasks: (Given for immediate Context)
+* utils.rs: Create weighted sampler
+    * Typedef "Xoshiro128PlusPlus" of rand to local type `Random`
+    * Create a new function `random_weighted(rng: &mut Random, weights: &[usize]) -> usize`
+        that returns index of random value depending on weights
+        E.g. if there are three weights, weights=vec!(0,1,10), then value=0 will not be returned, value=2 will be returned 10 times more often than 1.
+    * Include utils from main.
+
+* Edit random_weighted to return Option<usize> (and edit tests too)
+* Run tests and fix them (eg edit weights so significantly that chance to fail is negligible)
+On: fn test_random_weighted_all_same_weights().
+* Instead of the current implementation generate results[3], then call random_weighted 300 times(checking each time value is some(0..2))
+and then check that every result is in 90..110 range (except of hardcoding 300 and delta 10 declare constants)
+* Merge loops together. Vec results is not required. All what required is rng returned < 3 and summing it into counts[n]
+
+New tasks, test to edit: fn test_random_weighted_all_same_weights().
+* Change DELTA to 20.
+
+* DO NOT EDIT OTHER TESTS
+  ====================
+Focus On: fn test_random_weighted_all_same_weights().
+
+Examine the current imlpementation. 
+
+The body of the test essentialy does 2 things:
+* For a given distribution defined by weight it calls random N times
+* Then it checks against expected distribution with "noise" (DELTA)
+
+Extract it to a helper function for our tests: extract this behaviour into another function
+that from a single argument `weight`s, it samples N times and check sampled to be close to expected outcome
+using constant DELTA
+
+* For now use this function in test_random_weighted_all_same_weights only
+  ====================
+  ====================
+  ====================
+  ====================
+  ====================
+  ====================
+  ====================
+  ====================

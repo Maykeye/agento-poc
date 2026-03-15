@@ -76,112 +76,40 @@ class AgencyNode:
         * Reader: Teview the plan
         """
         planner = AiReadNode(self.initial)
-        executioner = AiWriteNode(self.initial)
+        doer = AiWriteNode(self.initial)
         reviewer = AiReadNode(self.initial)
 
-        the_plan_template = f"""Your role is an AI planner.
-Given a user request and access to the source,
-prepare high-level design plan of what needs to be done in the current step of implementation. Omit writing low-level source code.
-Your design plan will be passed to an agent that will execute it.
-Your goal is to "enhance" user request, make decisions that necessary so writer will avoid doing it.
+        the_plan_template = read_text("./prompts/pdr_planner.txt").format(
+            initial=self.initial, user_request=user_request
+        )
 
-Expected output: write plan in
+        doer_template = read_text("./prompts/pdr_doer.txt").format(
+            initial=self.initial, user_request=user_request
+        )
 
-<PLAN>
-The actual plan that you'll make
-</PLAN>
-
-Text outside of <PLAN></PLAN> is resereved for your considerations of what to do. <PLAN> will be extracted and passed.
-Initial user requesst:
-<INITIAL_REQUEST>
-{self.initial}
-</INITIAL_REQUEST>
-
-Current step we are working on that you must plan:
-<CURRENT_STEP>
-{user_request}
-</CURRENT_STEP>
-"""
-
-        executioner_template = f"""Your role is an AI software engineer. You will edit the code given the following:
-* Global task. A description of the software we are writing
-* Current step. A description of the step that needs to be done
-* Plan of implementation. A detailed plan how to execute the the current plan.
-    * You are free to sidestep the plan if you believe it is necessary, but try to stick to it
-
-After implementing the current step in accordance to the Current Step, please run `cargo check` and `cargo test` and fix the errors.
-
-
-Initial global task:
-<INITIAL_REQUEST>
-{self.initial}
-</INITIAL_REQUEST>
-
-Current step we are working on that you must plan:
-<CURRENT_STEP>
-{user_request}
-</CURRENT_STEP>
-"""
-
-        reviewer_template = f"""Your role is an AI software engineer. You will review the code given the following:
-* Global task. A description of the software we are writing
-* Current step. A description of the step that needs to be done
-* Plan of implementation. A detailed plan how to execute the the current plan.
-    * You are free to sidestep the plan if you believe it is necessary, but try to stick to it
-* Results of git_diff (to see what was changed) and git_status(to see what files were added so you'll know what to read)
-After implementing the current step in accordance to the Current Step, please run `cargo check` and `cargo test` and fix the errors.
-* Feel free to read not mentioned files too but pay less attention to them if they and changes don't touch each other. 
-
-Initial global task:
-<INITIAL_REQUEST>
-{self.initial}
-</INITIAL_REQUEST>
-
-Current step we are working on that you must plan:
-<CURRENT_STEP>
-{user_request}
-</CURRENT_STEP>
-
-The plan
-<PLAN_OF_CURRENT_STEP>
-%%%PLAN
-</PLAN_OF_CURRENT_STEP>
-
-Expected output: write review in
-
-<REVIEW>
-[DECISION]
-Your review commentary
-</REVIEW>
-
-where [DECISION] is either `[ACCEPT]` (not quoted) or `[REJECT]`, e.g. (not quoted)
-
-<REVIEW
-[ACCEPT]
-Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum
-</REVIEW>
-
-Your review will be given to the code writer."""
+        review_template = read_text("./prompts/pdr_review.txt").format(
+            initial=self.initial, user_request=user_request
+        )
 
         the_plan = planner.simple(the_plan_template).content
         the_plan = extract_tag(the_plan_template, "PLAN")
-        review = ""
 
+        review = ""
         while True:
-            for_executioner = executioner_template + f"""The plan:
+            for_doer = doer_template + f"""The plan:
 <PLAN_OF_CURRENT_STEP>
 {the_plan}
 </PLAN_OF_CURRENT_STEP>
  """
             if review:
-                for_executioner += f"""The old implementation was rejected for the following reasons that ough to be fixed:
+                for_doer += f"""The old implementation was rejected for the following reasons that ough to be fixed:
 <REVIEW>
 {review}
 </REVIEW>
             """
-            executioner.simple(for_executioner)
+            doer.simple(for_doer)
             review = reviewer.simple(
-                reviewer_template.replace("%%%PLAN", the_plan)
+                review_template.replace("%%%PLAN", the_plan)
             ).content.strip()
             if not review.startswith("[REJECT]"):
                 break
@@ -199,17 +127,13 @@ class AiWriteNode(AgencyNode):
 
 def main():
     node = AgencyNode(read_text("./prompts/initial-game-idea.txt"))
-    node.plan_do_review("""
+    node.simple("""
 
-Focus on: tests/test_utils.rs: fn test_random_weighted_zero_weight()
+Focus on: tests/test_utils.rs:
 
-Right now it checks only one combination of weights: vec![0, 1, 1_000_000].
-Change it to three arrays + three chgecks:
-* [1_000_000, 0, 1]
-* [0, 1_000_000, 1]
-* [0, 1, 1_000_000]
+* check_weighted_distribution uses array `let mut counts: Vec<usize> = vec![0usize; weights.len()];`
 
-with corresponsing expected result
+Edit it to according to the style specified in the design plan
 
 """)
 
