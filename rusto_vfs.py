@@ -140,24 +140,42 @@ def write_file(
     return f">>> OK: WRITTEN {path} ({sz} bytes, {len(lines)} lines) \n>>> FIRST WRITTEN LINE: {first_line}"
 
 
-def run_cargo(cmd: str, args: list[str]):
+def run_executable(args: list[str]):
     try:
         # TODO: tee me
-        all_args = [
-            "cargo",
-            "--color",
-            "never",
-            cmd,
-            "--manifest-path",
-            str(PROJECT_DIRECTORY.joinpath("Cargo.toml")),
-        ] + args
-        print(">>> RUN:", cmd, args)
+        print(">>> RUN:", args)
         with empty_stdin() as stdin:
-            p = subprocess.run(all_args, capture_output=True, text=True, stdin=stdin)
+            p = subprocess.run(args, capture_output=True, text=True, stdin=stdin)
         return {"exitcode": p.returncode, "stdout": p.stdout, "stderr": p.stderr}
     except Exception as ex:
         print(ex)
         return {"error": str(ex)}
+
+
+def run_cargo(cmd: str, args: list[str]):
+    all_args = [
+        "cargo",
+        "--color",
+        "never",
+        cmd,
+        "--manifest-path",
+        str(PROJECT_DIRECTORY.joinpath("Cargo.toml")),
+    ] + args
+    return run_executable(all_args)
+
+
+def run_git(args):
+    return run_executable(["git", "-C", str(PROJECT_DIRECTORY)] + args)
+
+
+def git_status():
+    """Execute `git status` with no arguments"""
+    return run_git(["status"])
+
+
+def git_diff(args: Annotated[list, "arguments to pass AFTER git diff"]):
+    """Execute `git diff with additional provided arguments (maybe an empty array)`"""
+    return run_git(["diff"] + args)
 
 
 def cargo_add_crate(args: Annotated[list, "Arguments that go after `cargo add`"]):
