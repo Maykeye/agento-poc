@@ -132,8 +132,9 @@ def main():
 
     rusto_vfs.make_file_readonly("DESIGN.md")
     node.plan_do_review("""
-Let's change ore density definition
-Replace tuple with range
+* world.rs: Preparing helpers for chunk generation.
+    * Create function `ore_generation_weights(&world, y)->vec<usize>`
+    It returns a "weights" of each ore by examining ore density in its definition 
 """)
 
 

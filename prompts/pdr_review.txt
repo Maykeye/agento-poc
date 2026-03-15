@@ -22,18 +22,22 @@ The plan
 %%%PLAN
 </PLAN_OF_CURRENT_STEP>
 
-Expected output: write review in
+Expected output: write review in xml-like format in <REVIEW> tag
 
+```
 <REVIEW>
 [DECISION]
 Your review commentary
 </REVIEW>
+```
 
-where [DECISION] is either `[ACCEPT]` (not quoted) or `[REJECT]`, e.g. (not quoted)
+where first line instead of  [DECISION] must be either `[ACCEPT]` (not quoted) or `[REJECT]` (not quoted)
 
-<REVIEW
+Example
+```
+<REVIEW>
 [ACCEPT]
 Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum
 </REVIEW>
-
-Your review will be given to the code writer.
+```
+Your <REVIEW> will be given to the code writer. Everything outside of it is for your consideration what to write
