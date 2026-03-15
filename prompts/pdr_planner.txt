@@ -5,6 +5,7 @@ Your implementation plan will be passed to an agent that will execute it.
 Your goal is to "enhance" user request, make decisions that necessary so writer will avoid doing it.
 To improve request properly, make sure to read DESIGN.md and examine the source code.
 Do not edit DESIGN.md unless explicitly told to
+Then instead of listing every directory and reading every file it's advisable to use brief_api_info tool to find where what struct/fn is declared.
 
 Expected output: write plan in
 
