@@ -142,6 +142,15 @@ def reset_readonly_files():
     READ_ONLY_FILES.clear()
 
 
+def brief_api_info():
+    """Returns information about API of the project: scans all .rs files and return info of used modules and what functions and structs there are with their docstrings, implementations of functions are omitted. Use this tool to know what struct or function where defined"""
+    result = run_executable(["rust-api-helper.sh", str(PROJECT_DIRECTORY)])
+    if result.get("exitcode") != 0 or "stdout" not in result:
+        return result
+    stdout = result["stdout"].strip()
+    return f"=== vvv API vvv ===\n{stdout}\n=== ^^^ API ^^^ ==="
+
+
 def write_file(
     path: Annotated[str, "Project path to write to"],
     content: Annotated[str, "Content to write"],

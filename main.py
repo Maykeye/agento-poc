@@ -41,6 +41,7 @@ class AgencyNode:
         llm.add_tool(rusto_vfs.cargo_test)
         llm.add_tool(rusto_vfs.git_diff)
         llm.add_tool(rusto_vfs.git_status)
+        llm.add_tool(rusto_vfs.brief_api_info)
 
     def _simple_system(self):
         return "You are a helpful AI assistant, expert rust programmer."
