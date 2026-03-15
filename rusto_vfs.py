@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, ReadOnly
 from pathlib import Path
 import logging
 import os
@@ -81,6 +81,8 @@ def read_file(path: Annotated[str, "Project path to read from"]):
 def delete_file(path: Annotated[str, "File to delete"]):
     """Delete the file"""
     p = real_path(path)
+    if p in READ_ONLY_FILES:
+        return {path: "error", "error": READ_ONLE_ERROR}
 
     if p.exists() and not p.is_file():
         return {path: "error", "error": f"File exists, but it is not a file"}
@@ -123,12 +125,32 @@ def rmdir(path: Annotated[str, "File to delete"]):
     return {path: "ok", "desc": f"File deleted"}
 
 
+READ_ONLY_FILES = []
+READ_ONLE_ERROR = (
+    """FATAL ERRROR. 
+You are NOT allowed to edit this file. 
+ABORT EVERYTHING WHAT YOU ARE DOING AT ONCE! 
+INSTEAD EXPLAIN IMMEDIATLY WHAT PART OF REQUEST MADE YOU TO TRY TO EDIT IT""",
+)
+
+
+def make_file_readonly(path: str):
+    READ_ONLY_FILES.append(real_path(path))
+
+
+def reset_readonly_files():
+    READ_ONLY_FILES.clear()
+
+
 def write_file(
     path: Annotated[str, "Project path to write to"],
     content: Annotated[str, "Content to write"],
 ):
     """Write the file. If file didn't exist, it will be created with the given content. If file existed, its content will be replaced with given content"""
     p = real_path(path)
+
+    if p in READ_ONLY_FILES:
+        return {path: "error", "error": READ_ONLE_ERROR}
 
     if p.exists() and not p.is_file():
         return {path: "error", "error": f"File exists, but it is not a file"}
@@ -200,6 +222,8 @@ def edit_file(
 ):
     """Edit existing file. Finds `replace_from` and replaces the it with `replace_with`. Exactly one instance of `replace_from` must exist or error will occur"""
     p = real_path(path)
+    if p in READ_ONLY_FILES:
+        return {path: "error", "error": READ_ONLE_ERROR}
 
     if p.exists() and not p.is_file():
         return {path: "error", "error": f"File exists, but it is not a file"}

@@ -111,6 +111,7 @@ class AgencyNode:
             review = reviewer.simple(
                 review_template.replace("%%%PLAN", the_plan)
             ).content.strip()
+            review = extract_tag(review, "REVIEW")
             if not review.startswith("[REJECT]"):
                 break
 
@@ -127,14 +128,11 @@ class AiWriteNode(AgencyNode):
 
 def main():
     node = AgencyNode(read_text("./prompts/initial-game-idea.txt"))
-    node.simple("""
 
-Focus on: tests/test_utils.rs:
-
-* check_weighted_distribution uses array `let mut counts: Vec<usize> = vec![0usize; weights.len()];`
-
-Edit it to according to the style specified in the design plan
-
+    rusto_vfs.make_file_readonly("DESIGN.md")
+    node.plan_do_review("""
+Let's change ore density definition
+Replace tuple with range
 """)
 
 
