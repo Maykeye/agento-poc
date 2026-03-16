@@ -1,0 +1,128 @@
+from typing import Callable, Literal
+import inspect
+import typing
+from typing import Annotated
+from dataclasses import dataclass, field
+
+
+@dataclass
+class Tool:
+    """Dataclass to store tool information"""
+
+    name: str
+    description: str
+    parameters: dict = field(default_factory=dict)
+
+    def __post_init__(self):
+        if not self.parameters:
+            self.parameters = parse_tool_parms(self.__call__)  # type: ignore
+
+    def llm_func_tool_info(self):
+        return {
+            "type": "function",
+            "function": {
+                "type": "function",
+                "name": self.name,
+                "description": self.description,
+                "parameters": self.parameters,
+            },
+        }
+
+
+def parse_tool_parms(tool_fn: Callable):
+    def _parse_type(raw_type) -> dict:
+        if typing.get_origin(raw_type) == Literal:
+            values = typing.get_args(raw_type)
+            res = _parse_type(type(values[0]))
+            res["enum"] = list(values)
+            return res
+
+        known = {
+            int: "integer",
+            float: "number",
+            bool: "boolean",
+            list: "array",  # TODO: list[str]?
+            str: "string",
+        }
+        if name := known.get(raw_type):
+            return {"type": name}
+        raise ValueError(raw_type)
+
+    sig = list(inspect.signature(tool_fn).parameters.values())
+    args = {}
+    required = []
+    for parm in sig:
+        if parm.name == "self":
+            continue
+        assert (
+            typing.get_origin(parm.annotation) is Annotated
+        ), f"tool must have Annotated arg, not {parm}"
+
+        type_info = typing.get_args(parm.annotation)
+        assert len(type_info) == 2, "Expected: Annotated[type, description]"
+        argument = _parse_type(type_info[0])
+        argument["description"] = type_info[1]
+        args[parm.name] = argument
+        required.append(parm.name)
+
+    return {
+        "type": "object",
+        "properties": args,
+        "required": required,
+    }
+
+
+class ToolRegistry:
+    """Collection of tools available to MCP server"""
+
+    def __init__(self):
+        self.tools: dict[str, Tool] = {}
+
+    def add_tool(self, tool: Tool):
+        """
+        Registers a new tool with the server.
+
+        Args:
+            tool: A Tool instance to register.
+
+        Raises:
+            ValueError: If a tool with the same name already exists.
+        """
+
+        if tool.name in self.tools:
+            raise ValueError(f"Tool '{tool.name}' already exists in server registry.")
+
+        self.tools[tool.name] = tool
+        print(f"✅ Tool registered: {tool.name}")
+
+    def get_tools_list(self):
+        """Returns the list of tools formatted for JSON-RPC response"""
+        return [tool.llm_func_tool_info() for tool in self.tools.values()]
+
+    def call_tool(self, name, arguments):
+        """Executes a tool by name with given arguments."""
+        if tool := self.tools.get(name):
+            return tool(**arguments)  # type: ignore
+
+        raise KeyError(f"Tool '{name}' not found")
+
+
+class TimeTool(Tool):
+    """Sample"""
+
+    def __init__(self):
+        super().__init__(
+            name="get_current_time",
+            description="Returns the current local time in ISO format",
+        )
+
+    def __call__(self):
+        from datetime import datetime
+
+        now = datetime.now()
+        return {
+            "local_time": now.isoformat(),
+            "timestamp": now.timestamp(),
+            "timezone": str(now.tzinfo) if now.tzinfo else "Local",
+            "formatted": now.strftime("%Y-%m-%d %H:%M:%S"),
+        }

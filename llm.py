@@ -1,12 +1,11 @@
 from dataclasses import dataclass, field
-from typing import Annotated
-from typing import Callable, Literal, Optional
-import inspect
+from typing import Optional
 import json
 import os
 import requests
 import sys
-import typing
+
+from tool import Tool
 
 
 @dataclass
@@ -43,43 +42,14 @@ class LLM:
 
     def __init__(self) -> None:
         self.url = f"http://localhost:{os.environ.get('LLAMA_CPP_PORT', 10000)}/v1/chat/completions"
-        self.tools = []
-        self.tools_callbacks = {}
+        self.tools: dict[str, Tool] = {}
         self.tools_indentation = 1
         self.callback = LLMVerbose()
 
-    def add_tool(self, tool_fn: Callable):
+    def add_tool(self, tool: Tool):
         """Add tools, description is taken from docstring, description  and type of arguments is taken from their type info(Annotated[raw, description])"""
-        sig = list(inspect.signature(tool_fn).parameters.values())
-        args = {}
-        # TODO: fix Optional -> required
-        required = []
-        for parm in sig:
-            assert (
-                typing.get_origin(parm.annotation) is Annotated
-            ), "tool must have Annotated arg"
-
-            type_info = typing.get_args(parm.annotation)
-            assert len(type_info) == 2, "Expected: Annotated[type, description]"
-            argument = LLM._parse_type(type_info[0])
-            argument["description"] = type_info[1]
-            args[parm.name] = argument
-            required.append(parm.name)
-
-        tool = {
-            "type": "function",
-            "function": {
-                "name": tool_fn.__name__,
-                "description": inspect.getdoc(tool_fn),
-                "parameters": {
-                    "type": "object",
-                    "properties": args,
-                    "required": required,
-                },
-            },
-        }
-        self.tools.append(tool)
-        self.tools_callbacks[tool_fn.__name__] = tool_fn
+        assert tool.name not in self.tools
+        self.tools[tool.name] = tool
 
     def generate(self, messages: list[dict], do_tool_calls=True) -> Response:
         """Generate response. If calls to be called, will recurisvely call itself and return last response"""
@@ -92,7 +62,8 @@ class LLM:
 
         if self.tools:
             payload["tool_choice"] = "auto"
-            payload["tools"] = self.tools
+            payload["tools"] = self._tool_listing_for_llm()
+            print(payload["tools"])
 
         response = requests.post(self.url, json=payload, stream=True)
         response.raise_for_status()
@@ -180,11 +151,11 @@ class LLM:
 
         if finish_reason == "tool_calls" and do_tool_calls:
             for call in res.tool_calls:
-                tool_callback = self.tools_callbacks[call.function]
+                tool_callback = self.tools[call.function]
                 print(f">>> FUNC: {call.function[:32]} ARGS: `{call.arguments[:200]}`")
                 try:
                     args = json.loads(call.arguments)
-                    result = tool_callback(**args)
+                    result = tool_callback(**args)  # type: ignore
                 except Exception as ex:
                     result = json.dumps({"TOOL CALL ERROR": str(ex)})
 
@@ -222,24 +193,12 @@ class LLM:
     def msg_user(self, txt: str):
         return {"role": "user", "content": txt}
 
-    @staticmethod
-    def _parse_type(raw_type) -> dict:
-        if typing.get_origin(raw_type) == Literal:
-            values = typing.get_args(raw_type)
-            res = LLM._parse_type(type(values[0]))
-            res["enum"] = list(values)
-            return res
+    def _tool_listing_for_llm(self) -> list:
+        out = []
 
-        known = {
-            int: "integer",
-            float: "number",
-            bool: "boolean",
-            list: "array",  # TODO: list[str]?
-            str: "string",
-        }
-        if name := known.get(raw_type):
-            return {"type": name}
-        raise ValueError(raw_type)
+        for tool in self.tools.values():
+            out.append(tool.llm_func_tool_info())
+        return out
 
 
 class LLMVerbose:
