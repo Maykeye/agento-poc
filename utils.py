@@ -28,3 +28,19 @@ def extract_tag(text: str, tag: str, strip=True) -> str:
     if (idx := text.rfind(f"</{tag}>\n")) >= 0:
         text = text[:idx]
     return text.strip() if strip else text
+
+
+def log_prompt(project, prompt):
+    import sqlite3
+    import datetime
+
+    p = Path("~/.local/state/agento.log").expanduser()
+    now = datetime.datetime.now(datetime.UTC).isoformat()
+    with sqlite3.connect(p) as sql:
+        sql.execute(
+            """CREATE TABLE IF NOT EXISTS log(project TEXT NOT NULL, log TEXT NOT NULL, created_at TEXT NOT NULL)"""
+        )
+        sql.execute(
+            "INSERT INTO log(project, log, created_at) VALUES(?,?,?)",
+            (project, prompt, now),
+        )

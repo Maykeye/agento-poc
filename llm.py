@@ -63,7 +63,6 @@ class LLM:
         if self.tools:
             payload["tool_choice"] = "auto"
             payload["tools"] = self._tool_listing_for_llm()
-            print(payload["tools"])
 
         response = requests.post(self.url, json=payload, stream=True)
         response.raise_for_status()

@@ -4,12 +4,12 @@ from typing import Optional
 from llm import LLM
 from utils import read_text
 import rusto
+from utils import log_prompt
 
 
 class AgencyNode:
-    def __init__(self, initial: str) -> None:
+    def __init__(self) -> None:
         self._llm: Optional[LLM] = None
-        self.initial = initial
 
     def _llm_initializers(self):
         return [self._llm_reading, self._llm_editing]
@@ -53,11 +53,17 @@ class AgencyNode:
 
 
 def main():
-    rusto.read_config("~/.config/agento.mcp.json")
-    node = AgencyNode(read_text("./prompts/initial-game-idea.txt"))
-
+    # init IO
+    rusto.read_config("~/.config/agento.json")
     rusto.make_file_readonly("DESIGN.md")
-    node.simple(read_text("prompt.txt"))
+
+    # read prompt
+    prompt = read_text("prompt.txt")
+    log_prompt(str(rusto.PROJECT_DIRECTORY), prompt)
+
+    # run
+    node = AgencyNode()
+    node.simple(prompt)
     rusto.rustfmt()
 
 
