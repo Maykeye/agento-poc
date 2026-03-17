@@ -293,11 +293,22 @@ class ToolGitStatus(Tool):
         return run_git(["status"])
 
 
+class ToolGitAdd(Tool):
+    def __init__(self):
+        super().__init__(
+            "git_add",
+            "Execute `git add` with additional provided arguments",
+        )
+
+    def __call__(self, args: Annotated[list, "arguments tht go after `git diff`"]):
+        return run_git(["add"] + args)
+
+
 class ToolGitDiff(Tool):
     def __init__(self):
         super().__init__(
             "git_diff",
-            "Execute `git diff with additional provided arguments (maybe an empty array)`",
+            "Execute `git diff` with additional provided arguments (maybe an empty array)",
         )
 
     def __call__(self, args: Annotated[list, "arguments tht go after `git diff`"]):
