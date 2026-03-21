@@ -30,15 +30,24 @@ def open_log():
         print(f"LOGGING ALL MESSAGES TO {f}", file=sys.stderr)
         return f
     except Exception as e:
-        print(f"Can't open logging file {path}")
+        print(f"Can't open logging file {path}: {e}")
         return None
 
 
 LOG = open_log()
 
 
+@dataclass
+class LlmInstace:
+    llm: "LLM"
+    messages: list[dict]
+
+
 class LLM:
     """LLM is a wrapper around llama.cpp that eases generation and tool integration"""
+
+    INSTANCES: list[LlmInstace] = []
+    """ Keeps stack of LLM instances that are currently being run  """
 
     def __init__(self) -> None:
         self.url = f"http://localhost:{os.environ.get('LLAMA_CPP_PORT', 10000)}/v1/chat/completions"
@@ -51,10 +60,27 @@ class LLM:
         assert tool.name not in self.tools
         self.tools[tool.name] = tool
 
-    def generate(self, messages: list[dict], do_tool_calls=True) -> Response:
-        """Generate response. If calls to be called, will recurisvely call itself and return last response"""
+    def generate(self, messages: list[dict]) -> Response:
+        try:
+            self.INSTANCES.append(LlmInstace(self, messages))
+            return self._generate(messages)
+        finally:
+            if not self.INSTANCES:
+                print("LLM.INSTANCES is empty", file=sys.stderr)
+            else:
+                if self.INSTANCES[-1].llm is not self:
+                    print("LLM.INSTANCES desync and poinths other llm", file=sys.stderr)
+                elif self.INSTANCES[-1].messages is not messages:
+                    print(
+                        "LLM.INSTANCES desync and poinths other messages",
+                        file=sys.stderr,
+                    )
 
-        assert isinstance(do_tool_calls, bool)
+            raise
+
+    def _generate(self, messages: list[dict]) -> Response:
+        """Generate response. If tools to be called, will recurisvely call itself and return last response. If calling tools is not desired, create new LLM instance with empty tools"""
+
         payload = {
             "messages": messages,
             "stream": True,
@@ -148,7 +174,7 @@ class LLM:
                 )
         messages.append(msg)
 
-        if finish_reason == "tool_calls" and do_tool_calls:
+        if finish_reason == "tool_calls":
             for call in res.tool_calls:
                 tool_callback = self.tools[call.function]
                 print(f">>> FUNC: {call.function[:32]} ARGS: `{call.arguments[:200]}`")
@@ -176,7 +202,7 @@ class LLM:
                     }
                 )
 
-            return self.generate(messages, do_tool_calls)
+            return self.generate(messages)
 
         return res
 
