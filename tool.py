@@ -3,6 +3,7 @@ import inspect
 import typing
 from typing import Annotated
 from dataclasses import dataclass, field
+import subprocess
 
 
 @dataclass
@@ -126,3 +127,20 @@ class TimeTool(Tool):
             "timezone": str(now.tzinfo) if now.tzinfo else "Local",
             "formatted": now.strftime("%Y-%m-%d %H:%M:%S"),
         }
+
+
+def empty_stdin():
+    """Helper function to disable stdin in subprocesses"""
+    return open("/dev/null")
+
+
+def run_executable(args: list[str]):
+    try:
+        # TODO: tee me
+        print(">>> RUN:", args)
+        with empty_stdin() as stdin:
+            p = subprocess.run(args, capture_output=True, text=True, stdin=stdin)
+        return {"exitcode": p.returncode, "stdout": p.stdout, "stderr": p.stderr}
+    except Exception as ex:
+        print(ex)
+        return {"error": str(ex)}

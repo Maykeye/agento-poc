@@ -2,9 +2,10 @@
 from typing import Optional
 
 from llm import LLM
-from utils import read_text
-import rusto
-from utils import log_prompt
+from utils import log_prompt, read_text
+import config
+import tool_io
+import tool_sh
 
 
 class AgencyNode:
@@ -27,22 +28,22 @@ class AgencyNode:
         return llm
 
     def _llm_editing(self, llm: LLM):
-        llm.add_tool(rusto.ToolWriteFile())
-        llm.add_tool(rusto.ToolEditFile())
-        llm.add_tool(rusto.ToolDeleteFile())
-        llm.add_tool(rusto.ToolMkDir())
-        llm.add_tool(rusto.ToolRmDir())
-        llm.add_tool(rusto.ToolCargoAdd())
+        llm.add_tool(tool_io.ToolWriteFile())
+        llm.add_tool(tool_io.ToolEditFile())
+        llm.add_tool(tool_io.ToolDeleteFile())
+        llm.add_tool(tool_io.ToolMkDir())
+        llm.add_tool(tool_io.ToolRmDir())
+        llm.add_tool(tool_sh.ToolCargoAdd())
 
     def _llm_reading(self, llm: LLM):
-        llm.add_tool(rusto.ToolReadFile())
-        llm.add_tool(rusto.ToolLs())
-        llm.add_tool(rusto.ToolCargoCheck())
-        llm.add_tool(rusto.ToolCargoTest())
-        llm.add_tool(rusto.ToolGitDiff())
-        llm.add_tool(rusto.ToolGitStatus())
-        llm.add_tool(rusto.ToolGitAdd())
-        llm.add_tool(rusto.ToolRustApiInfo())
+        llm.add_tool(tool_io.ToolReadFile())
+        llm.add_tool(tool_io.ToolLs())
+        llm.add_tool(tool_sh.ToolCargoCheck())
+        llm.add_tool(tool_sh.ToolCargoTest())
+        llm.add_tool(tool_sh.ToolGitDiff())
+        llm.add_tool(tool_sh.ToolGitStatus())
+        llm.add_tool(tool_sh.ToolGitAdd())
+        llm.add_tool(tool_sh.ToolRustApiInfo())
 
     def simple(self, user_prompt: str):
         llm = self.llm
@@ -55,17 +56,17 @@ class AgencyNode:
 
 def main():
     # init IO
-    rusto.read_config("~/.config/agento.json")
+    config.read_config("~/.config/agento.json")
     #  rusto.make_file_readonly("DESIGN.md")
 
     # read prompt
     prompt = read_text("prompt.md")
-    log_prompt(str(rusto.PROJECT_DIRECTORY), prompt)
+    log_prompt(str(config.PROJECT_DIRECTORY), prompt)
 
     # run
     node = AgencyNode()
     node.simple(prompt)
-    rusto.rustfmt()
+    tool_sh.rustfmt()
 
 
 if __name__ == "__main__":
