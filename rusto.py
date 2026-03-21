@@ -47,7 +47,7 @@ def set_project_directory(project: str | Path):
     """Setup project directory (will be resolved to absolute, expanduser() yaself)"""
     global PROJECT_DIRECTORY
     PROJECT_DIRECTORY = Path(project).absolute()
-    # print(f"New project dir: {PROJECT_DIRECTORY}")
+    print(f"New project dir: {PROJECT_DIRECTORY}")
 
 
 READ_ONLY_FILES = []
@@ -82,7 +82,8 @@ def empty_stdin():
 class ToolLs(Tool):
     def __init__(self):
         super().__init__(
-            name="ls", description="List files and subdirectories in a given directory"
+            name="ls",
+            description="List files and subdirectories in a given directories",
         )
 
     def _dumb_gitignore_filter(self):
@@ -97,40 +98,54 @@ class ToolLs(Tool):
         return lines
 
     def __call__(
-        self, path: Annotated[str, "Path to get listing(use '.' for listing base path)"]
+        self,
+        paths: Annotated[
+            list,
+            "List of paths to get listing from(use [] or ['.'] for listing base project path)",
+        ],
     ):
-        p = real_path(path)
-        if p.exists() and not p.is_dir():
-            return {path: "error", "error": f"Path exists, but it is not a directory"}
-        if not p.exists():
-            return {path: "error", "error": f"File does't exist"}
-
-        # We'll excldue listing of files included in .gitignore
-        exclude = self._dumb_gitignore_filter()
-
-        entries = [x for x in p.glob("*")]
-        entries.sort()
+        if not paths:
+            paths = ["."]
 
         out = []
-        if p != real_path("."):
-            out.append(" Directory: ..")
-        for entry in entries:
-            if entry.absolute() in exclude:
+
+        for path in paths:
+            p = real_path(path)
+            if p.exists() and not p.is_dir():
+                out.append(f"Listing: {path} : Path exists, but is not a directory")
+                continue
+            if not p.exists():
+                out.append(f"Listing: {path} : Path does not exist")
                 continue
 
-            desc = ""
-            if entry.is_file():
-                desc += " File: "
+            # We'll excldue listing of files included in .gitignore
+            exclude = self._dumb_gitignore_filter()
+            entries = [x for x in p.glob("*")]
 
-            if entry.is_dir():
-                desc += " Directory: "
+            buf = []
+            if p != real_path("."):
+                buf.append(" Directory: ..")
+            for entry in entries:
+                if entry.absolute() in exclude:
+                    continue
 
-            desc += entry.name
-            if entry.is_file():
-                desc += f" (Size: {os.path.getsize(entry)} bytes)"
-            out.append(desc)
+                desc = ""
+                if entry.is_file():
+                    desc += " File: "
 
-        return f"LISTING: {path}\n" + "\n".join(out) + f"\n({len(out)} entries)"
+                if entry.is_dir():
+                    desc += " Directory: "
+
+                desc += entry.name
+                if entry.is_file():
+                    desc += f" (Size: {os.path.getsize(entry)} bytes)"
+                buf.append(desc)
+            buf.sort(key=lambda v: v.lower())
+
+            out.append(
+                f"Listing: {path}\n" + "\n".join(buf) + f"\n({len(buf)} entries)"
+            )
+        return "\n\n".join(out)
 
 
 #################

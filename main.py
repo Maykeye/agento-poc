@@ -41,6 +41,7 @@ class AgencyNode:
         llm.add_tool(rusto.ToolCargoTest())
         llm.add_tool(rusto.ToolGitDiff())
         llm.add_tool(rusto.ToolGitStatus())
+        llm.add_tool(rusto.ToolGitAdd())
         llm.add_tool(rusto.ToolRustApiInfo())
 
     def simple(self, user_prompt: str):
@@ -55,10 +56,10 @@ class AgencyNode:
 def main():
     # init IO
     rusto.read_config("~/.config/agento.json")
-    rusto.make_file_readonly("DESIGN.md")
+    #  rusto.make_file_readonly("DESIGN.md")
 
     # read prompt
-    prompt = read_text("prompt.txt")
+    prompt = read_text("prompt.md")
     log_prompt(str(rusto.PROJECT_DIRECTORY), prompt)
 
     # run
