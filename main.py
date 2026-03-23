@@ -2,17 +2,22 @@
 from typing import Optional
 
 from llm import LLM
+import tool_fork
 from utils import log_prompt, read_text
 import config
 import tool_io
 import tool_sh
+import sys
 
 
 class AgencyNode:
-    def __init__(self) -> None:
+    def __init__(self, read_only=False) -> None:
         self._llm: Optional[LLM] = None
+        self.readonly = read_only
 
     def _llm_initializers(self):
+        if self.readonly:
+            return [self._llm_reading]
         return [self._llm_reading, self._llm_editing]
 
     @property
@@ -44,6 +49,7 @@ class AgencyNode:
         llm.add_tool(tool_sh.ToolGitStatus())
         llm.add_tool(tool_sh.ToolGitAdd())
         llm.add_tool(tool_sh.ToolRustApiInfo())
+        llm.add_tool(tool_fork.ToolFork())
 
     def simple(self, user_prompt: str):
         llm = self.llm
@@ -60,11 +66,18 @@ def main():
     #  rusto.make_file_readonly("DESIGN.md")
 
     # read prompt
+    intro = read_text("intro.md")
     prompt = read_text("prompt.md")
-    log_prompt(str(config.PROJECT_DIRECTORY), prompt)
+    prompt = f"{intro}\n\n{prompt}"
+    log_prompt(str(config.project_directory()), prompt)
+
+    read_only = sys.argv[1:] == ["--read-only"]
+    if not read_only and len(sys.argv) > 1:
+        raise ValueError("invalid opts. Use --read-only for R/O")
 
     # run
-    node = AgencyNode()
+    print("Read only:", read_only)
+    node = AgencyNode(read_only=read_only)
     node.simple(prompt)
     tool_sh.rustfmt()
 

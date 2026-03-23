@@ -2,8 +2,8 @@ from pathlib import Path
 from typing import Annotated
 from pathlib import Path
 import os
-from config import PROJECT_DIRECTORY, real_path, READ_ONLY_FILES, READ_ONLE_ERROR
-from tool import Tool, run_executable
+from config import real_path, READ_ONLY_FILES, READ_ONLE_ERROR
+from tool import Tool
 import re
 
 # TODO: import logging.basicConfig(level=logging.INFO)

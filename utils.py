@@ -44,3 +44,9 @@ def log_prompt(project, prompt):
             "INSERT INTO log(project, log, created_at) VALUES(?,?,?)",
             (project, prompt, now),
         )
+
+
+def name_tag(id, _cache={}):
+    if id not in _cache:
+        _cache[id] = f"q{len(_cache)+1:x}"
+    return _cache[id]

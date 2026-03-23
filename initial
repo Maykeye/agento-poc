@@ -1,0 +1,3 @@
+Please take look at specs/DESIGN.md, this is a direction we'll be moving towards implementing game step by step. 
+(please use rust api tool to learn what where defined)
+In very end if code was changed please make sure to call `cargo check` and `cargo test`

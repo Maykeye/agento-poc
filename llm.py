@@ -1,10 +1,13 @@
 from dataclasses import dataclass, field
 from typing import Optional
+
+import copy
 import json
 import os
 import requests
 import sys
-
+import traceback
+from utils import name_tag
 from tool import Tool
 
 
@@ -54,6 +57,13 @@ class LLM:
         self.tools: dict[str, Tool] = {}
         self.tools_indentation = 1
         self.callback = LLMVerbose()
+        self.tool_calls_id = []
+
+    def clone(self):
+        # TODO: copy or not callback?
+        llm = copy.deepcopy(self)
+        llm.callback = self.callback
+        return llm
 
     def add_tool(self, tool: Tool):
         """Add tools, description is taken from docstring, description  and type of arguments is taken from their type info(Annotated[raw, description])"""
@@ -65,18 +75,16 @@ class LLM:
             self.INSTANCES.append(LlmInstace(self, messages))
             return self._generate(messages)
         finally:
-            if not self.INSTANCES:
-                print("LLM.INSTANCES is empty", file=sys.stderr)
+            if self.INSTANCES:
+                last = self.INSTANCES[-1]
+                if last.llm is self and last.messages is messages:
+                    self.INSTANCES.pop()
+                else:
+                    print(f"LLM.INSTANCES desync", file=sys.stderr)
+                    print(f" LLM: exp: {id(self)}, got: {id(last.llm)}")
+                    print(f" MSG: exp: {id(messages)}, got: {id(last.messages)}")
             else:
-                if self.INSTANCES[-1].llm is not self:
-                    print("LLM.INSTANCES desync and poinths other llm", file=sys.stderr)
-                elif self.INSTANCES[-1].messages is not messages:
-                    print(
-                        "LLM.INSTANCES desync and poinths other messages",
-                        file=sys.stderr,
-                    )
-
-            raise
+                print("LLM.INSTANCES is empty", file=sys.stderr)
 
     def _generate(self, messages: list[dict]) -> Response:
         """Generate response. If tools to be called, will recurisvely call itself and return last response. If calling tools is not desired, create new LLM instance with empty tools"""
@@ -177,12 +185,20 @@ class LLM:
         if finish_reason == "tool_calls":
             for call in res.tool_calls:
                 tool_callback = self.tools[call.function]
-                print(f">>> FUNC: {call.function[:32]} ARGS: `{call.arguments[:200]}`")
+                print(
+                    f">>>{self.name_tag()} FUNC: {call.function[:32]} ARGS: `{call.arguments[:200]}`"
+                )
+                self.tool_calls_id.append(call.id)
                 try:
                     args = json.loads(call.arguments)
                     result = tool_callback(**args)  # type: ignore
                 except Exception as ex:
+                    traceback.print_exc()
                     result = json.dumps({"TOOL CALL ERROR": str(ex)})
+                if self.tool_calls_id[-1:] == [call.id]:
+                    self.tool_calls_id.pop()
+                else:
+                    print("Warning: tool call id mismatch", file=sys.stderr)
 
                 if isinstance(result, (list, dict)):
                     result = json.dumps(
@@ -202,7 +218,7 @@ class LLM:
                     }
                 )
 
-            return self.generate(messages)
+            return self._generate(messages)
 
         return res
 
@@ -224,6 +240,9 @@ class LLM:
         for tool in self.tools.values():
             out.append(tool.llm_func_tool_info())
         return out
+
+    def name_tag(self):
+        return "".join([name_tag(x.llm) for x in LLM.INSTANCES])
 
 
 class LLMVerbose:

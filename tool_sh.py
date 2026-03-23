@@ -1,13 +1,13 @@
 # File with tools that run executables
 from tool import run_executable, Tool
 from typing import Annotated
-from config import PROJECT_DIRECTORY
+import config
 import subprocess
 import shlex
 
 
 def run_git(args: list[str]):
-    return run_executable(["git", "-C", str(PROJECT_DIRECTORY)] + args)
+    return run_executable(["git", "-C", str(config.project_directory())] + args)
 
 
 def run_cargo(cmd: str, args: list[str]):
@@ -17,7 +17,7 @@ def run_cargo(cmd: str, args: list[str]):
         "never",
         cmd,
         "--manifest-path",
-        str(PROJECT_DIRECTORY.joinpath("Cargo.toml")),
+        str(config.project_directory().joinpath("Cargo.toml")),
     ] + args
     return run_executable(all_args)
 
@@ -93,7 +93,7 @@ class ToolRustApiInfo(Tool):
         )
 
     def __call__(self):
-        result = run_executable(["rust-api-helper.sh", str(PROJECT_DIRECTORY)])
+        result = run_executable(["rust-api-helper.sh", str(config.project_directory())])
         if result.get("exitcode") != 0 or "stdout" not in result:
             return result
         stdout = result["stdout"].strip()
@@ -103,5 +103,5 @@ class ToolRustApiInfo(Tool):
 # TODO: promoto to the tool one day
 def rustfmt():
     """Run rust fmt"""
-    p = shlex.quote(str(PROJECT_DIRECTORY))
+    p = shlex.quote(str(config.project_directory()))
     subprocess.run(["bash", "-c", f"cd {p}; rustfmt **/*.rs"])
