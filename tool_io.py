@@ -5,6 +5,7 @@ import os
 from config import real_path, READ_ONLY_FILES, READ_ONLE_ERROR
 from tool import Tool
 import re
+from context import context_mode, update_context, CONTEXTS
 
 # TODO: import logging.basicConfig(level=logging.INFO)
 
@@ -80,10 +81,10 @@ class ToolLs(Tool):
 
 class ToolReadFile(Tool):
     def __init__(self):
-        super().__init__(
-            name="read_file",
-            description="Read a file. If file read ok, its content will be returned as plain-text between `=== CONTENT START ===` and `=== CONTENT END ===`",
-        )
+        description = "Read a file. If file was read ok, its content will be returned as plain-text between `=== CONTENT START ===` and `=== CONTENT END ===`"
+        if context_mode():
+            description = "Read a file. If file was read OK, it will be placed into the files context."
+        super().__init__(name="read_file", description=description)
 
     def __call__(self, path: Annotated[str, "Project path to read from"]):
         p = real_path(path)
@@ -94,7 +95,10 @@ class ToolReadFile(Tool):
             return {path: "error", "error": f"Is not a file"}
 
         text = p.read_text()
-        return f">>> OK: READ {path}\n>>> === CONTENT START ===\n{text}\n>>> === CONTENT END ==="
+        if not context_mode():
+            return f">>> OK: READ {path}\n>>> === CONTENT START ===\n{text}\n>>> === CONTENT END ==="
+        else:
+            return update_context(path, text, "read_file")
 
 
 class ToolWriteFile(Tool):
@@ -121,6 +125,8 @@ class ToolWriteFile(Tool):
         sz = os.path.getsize(p)
         lines = content.splitlines()
         first_line = lines[0] if content else ""
+        if context_mode():
+            return update_context(path, content, "write_file")
         return f">>> OK: WRITTEN {path} ({sz} bytes, {len(lines)} lines) \n>>> FIRST WRITTEN LINE: {first_line}"
 
 
@@ -140,6 +146,8 @@ class ToolDeleteFile(Tool):
             return {path: "error", "error": f"File does't exist"}
 
         p.unlink()
+        if context_mode() and path in CONTEXTS:
+            update_context(path, "(file deleted)", "delete_file")
         return {path: "ok", "desc": f"File deleted"}
 
 
@@ -218,6 +226,10 @@ class ToolEditFile(Tool):
             }
         new_text = old_text.replace(replace_from, replace_with)
         p.write_text(new_text)
+
+        if context_mode():
+            return update_context(path, new_text, "edit_file")
+
         return {
             path: "ok",
             "desc": f"Chunk replaced from `{repr(replace_from[:32])}`... to `{repr(replace_with[:32])}`...",

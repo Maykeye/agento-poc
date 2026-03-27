@@ -9,6 +9,7 @@ import sys
 import traceback
 from utils import name_tag
 from tool import Tool
+from context import format_context, context_mode, context_header
 
 
 @dataclass
@@ -70,6 +71,20 @@ class LLM:
         assert tool.name not in self.tools
         self.tools[tool.name] = tool
 
+    def _inject_context(self, messages: list[dict]):
+        if not context_mode():
+            return
+        # allow 1 message to be system
+        idx = -1
+        if messages[0]["role"] == "user":
+            idx = 0
+        elif len(messages) > 1 and messages[1]["role"] == "user":
+            idx = 1
+
+        if idx >= 0 and not messages[idx]["content"].startswith(context_header()):
+            messages.insert(idx, {})
+        messages[idx] = self.msg_user(format_context())
+
     def generate(self, messages: list[dict]) -> Response:
         try:
             self.INSTANCES.append(LlmInstace(self, messages))
@@ -88,6 +103,8 @@ class LLM:
 
     def _generate(self, messages: list[dict]) -> Response:
         """Generate response. If tools to be called, will recurisvely call itself and return last response. If calling tools is not desired, create new LLM instance with empty tools"""
+
+        self._inject_context(messages)
 
         payload = {
             "messages": messages,

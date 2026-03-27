@@ -8,6 +8,7 @@ import config
 import tool_io
 import tool_sh
 import sys
+from context import set_context_mode
 
 
 class AgencyNode:
@@ -61,6 +62,9 @@ class AgencyNode:
 
 
 def main():
+    # Keep context in one message
+    set_context_mode(True)
+
     # init IO
     config.read_config("~/.config/agento.json")
     #  rusto.make_file_readonly("DESIGN.md")
