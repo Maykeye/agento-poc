@@ -62,21 +62,6 @@ class AgencyNode:
 
 
 def main():
-    """The prompt is built from two files:
-    intro.md that is inserted in the front of user prompt, and
-    prompt.md that is inserted after intro.md
-    The content of the files are are concatenated.
-
-    Another required file is ~/.config/agento.json that has structure like
-    ```json
-    {
-        "project_directory": "/home/user/src/project-directory/"
-    }
-    ```
-    directory will be changed and "locked" to it.
-    Use option --read-only to forbid writing to files(making directories, etc, only reading is allowed)
-    """
-
     # Keep context in one message: context mode means if we sent request to read files, the content of the file
     # is inserted in the beginning of the prompt
     set_context_mode(True)
