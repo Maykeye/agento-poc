@@ -78,11 +78,13 @@ class ToolCargoTest(Tool):
     def __init__(self):
         super().__init__(
             "cargo_test",
-            "Execute `cargo test (args)` with additionals provided args to test.",
+            "Execute `cargo nextest run (args)` with additionals provided args to run tests using `nextest`.",
         )
 
-    def __call__(self, args: Annotated[list, "arguments that go after `cargo test`"]):
-        return run_cargo("test", args)
+    def __call__(
+        self, args: Annotated[list, "arguments that go after `cargo nextest run`"]
+    ):
+        return run_cargo("nextest", ["run"] + args)
 
 
 class ToolRustApiInfo(Tool):
