@@ -28,11 +28,12 @@ PROJECT_DIRECTORY_ = Path("<THE PROJECT DIRECTORY IS NOT SET>")
 """ Home project directory, a "root" of the project """
 
 
-def set_project_directory(project: str | Path):
+def set_project_directory(project: str | Path, silent=False):
     """Setup project directory (will be resolved to absolute, expanduser() yaself)"""
     global PROJECT_DIRECTORY_
     PROJECT_DIRECTORY_ = Path(project).absolute()
-    print(f"New project dir: {PROJECT_DIRECTORY_}")
+    if not silent:
+        print(f"New project dir: {PROJECT_DIRECTORY_}")
 
 
 def project_directory():

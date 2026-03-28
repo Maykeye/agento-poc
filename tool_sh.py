@@ -87,6 +87,24 @@ class ToolCargoTest(Tool):
         return run_cargo("nextest", ["run"] + args)
 
 
+class ToolPythonUnittest(Tool):
+    def __init__(self):
+        super().__init__(
+            "python_unittest",
+            "Execute `python -m unittest (args)` with additionals provided args to run tests using `unittest`.",
+        )
+
+    def __call__(
+        self, args: Annotated[list, "arguments that go after `python -m unittest`"]
+    ):
+        all_args = [
+            "python",
+            "-m",
+            "unittest",
+        ] + args
+        return run_executable(all_args)
+
+
 class ToolRustApiInfo(Tool):
     def __init__(self):
         super().__init__(

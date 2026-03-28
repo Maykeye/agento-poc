@@ -9,7 +9,7 @@ import sys
 import traceback
 from utils import name_tag
 from tool import Tool
-from context import format_context, context_mode, context_header
+from context import context_handler
 
 
 @dataclass
@@ -17,6 +17,16 @@ class ToolCall:
     function: str
     arguments: str
     id: str
+
+    def llm_func_call_info(self):
+        return {
+            "id": self.id,
+            "type": "function",
+            "function": {
+                "name": self.function,
+                "arguments": self.arguments,
+            },
+        }
 
 
 @dataclass
@@ -71,20 +81,7 @@ class LLM:
         assert tool.name not in self.tools
         self.tools[tool.name] = tool
 
-    def _inject_context(self, messages: list[dict]):
-        if not context_mode():
-            return
-        # allow 1 message to be system
-        idx = -1
-        if messages[0]["role"] == "user":
-            idx = 0
-        elif len(messages) > 1 and messages[1]["role"] == "user":
-            idx = 1
-
-        if idx >= 0 and not messages[idx]["content"].startswith(context_header()):
-            messages.insert(idx, {})
-        messages[idx] = self.msg_user(format_context())
-
+    # TODO: split class to test/mock it easier
     def generate(self, messages: list[dict]) -> Response:
         try:
             self.INSTANCES.append(LlmInstace(self, messages))
@@ -104,7 +101,7 @@ class LLM:
     def _generate(self, messages: list[dict]) -> Response:
         """Generate response. If tools to be called, will recurisvely call itself and return last response. If calling tools is not desired, create new LLM instance with empty tools"""
 
-        self._inject_context(messages)
+        context_handler().prepare_current_llm(self)
 
         payload = {
             "messages": messages,
@@ -187,16 +184,7 @@ class LLM:
         if res.tool_calls:
             msg["tool_calls"] = []
             for tool in res.tool_calls:
-                msg["tool_calls"].append(
-                    {
-                        "id": tool.id,
-                        "type": "function",
-                        "function": {
-                            "name": tool.function,
-                            "arguments": tool.arguments,
-                        },
-                    }
-                )
+                msg["tool_calls"].append(tool.llm_func_call_info())
         messages.append(msg)
 
         if finish_reason == "tool_calls":
@@ -248,7 +236,7 @@ class LLM:
     def msg_system(self, txt: str):
         return {"role": "system", "content": txt}
 
-    def msg_user(self, txt: str):
+    def msg_user(self, txt: str) -> dict[str, str]:
         return {"role": "user", "content": txt}
 
     def _tool_listing_for_llm(self) -> list:
@@ -260,6 +248,11 @@ class LLM:
 
     def name_tag(self):
         return "".join([name_tag(x.llm) for x in LLM.INSTANCES])
+
+    def messages(self):
+        assert self.INSTANCES
+        assert self.INSTANCES[-1].llm is self
+        return self.INSTANCES[-1].messages
 
 
 class LLMVerbose:

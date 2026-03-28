@@ -8,13 +8,15 @@ import config
 import tool_io
 import tool_sh
 import sys
-from context import set_context_mode
+from context import set_context_mode, ContextMode
 
 
 class AgencyNode:
-    def __init__(self, read_only=False) -> None:
+    def __init__(self, read_only=False, lang: str = "rust") -> None:
         self._llm: Optional[LLM] = None
         self.readonly = read_only
+        self.lang = lang
+        assert self.lang in ["rust", "py"]
 
     def _llm_initializers(self):
         if self.readonly:
@@ -39,17 +41,21 @@ class AgencyNode:
         llm.add_tool(tool_io.ToolDeleteFile())
         llm.add_tool(tool_io.ToolMkDir())
         llm.add_tool(tool_io.ToolRmDir())
-        llm.add_tool(tool_sh.ToolCargoAdd())
+        if self.lang == "rust":
+            llm.add_tool(tool_sh.ToolCargoAdd())
 
     def _llm_reading(self, llm: LLM):
         llm.add_tool(tool_io.ToolReadFile())
         llm.add_tool(tool_io.ToolLs())
-        llm.add_tool(tool_sh.ToolCargoCheck())
-        llm.add_tool(tool_sh.ToolCargoTest())
+        if self.lang == "rust":
+            llm.add_tool(tool_sh.ToolCargoCheck())
+            llm.add_tool(tool_sh.ToolCargoTest())
+            llm.add_tool(tool_sh.ToolRustApiInfo())
+        if self.lang == "py":
+            llm.add_tool(tool_sh.ToolPythonUnittest())
         llm.add_tool(tool_sh.ToolGitDiff())
         llm.add_tool(tool_sh.ToolGitStatus())
         llm.add_tool(tool_sh.ToolGitAdd())
-        llm.add_tool(tool_sh.ToolRustApiInfo())
         llm.add_tool(tool_fork.ToolFork())
 
     def simple(self, user_prompt: str):
@@ -64,7 +70,7 @@ class AgencyNode:
 def main():
     # Keep context in one message: context mode means if we sent request to read files, the content of the file
     # is inserted in the beginning of the prompt
-    set_context_mode(True)
+    set_context_mode(ContextMode.RAW)
 
     # init IO
     config.read_config("~/.config/agento.json")
@@ -73,9 +79,9 @@ def main():
     # rusto.make_file_readonly("DESIGN.md")
 
     # read prompt
-    intro = read_text("intro.md")
+    intro = read_text("intro.md", "")
     prompt = read_text("prompt.md")
-    prompt = f"{intro}\n\n{prompt}"
+    prompt = f"{intro}\n\n{prompt}".strip()
     log_prompt(str(config.project_directory()), prompt)
 
     read_only = sys.argv[1:] == ["--read-only"]
@@ -84,7 +90,7 @@ def main():
 
     # run
     print("Read only:", read_only)
-    node = AgencyNode(read_only=read_only)
+    node = AgencyNode(read_only=read_only, lang="py")
     node.simple(prompt)
     tool_sh.rustfmt()
 

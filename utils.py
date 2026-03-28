@@ -1,8 +1,12 @@
 from pathlib import Path
 import subprocess
+from typing import Optional
 
 
-def read_text(path):
+def read_text(path, default: Optional[str] = None):
+    if default is not None and not Path(path).exists():
+        return default
+
     return Path(path).read_text()
 
 

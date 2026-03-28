@@ -5,7 +5,7 @@ import os
 from config import real_path, READ_ONLY_FILES, READ_ONLE_ERROR
 from tool import Tool
 import re
-from context import context_mode, update_context, CONTEXTS
+from context import CONTEXTS, ContextMode, context_handler
 
 # TODO: import logging.basicConfig(level=logging.INFO)
 
@@ -82,7 +82,7 @@ class ToolLs(Tool):
 class ToolReadFile(Tool):
     def __init__(self):
         description = "Read a file. If file was read ok, its content will be returned as plain-text between `=== CONTENT START ===` and `=== CONTENT END ===`"
-        if context_mode():
+        if context_handler().mode() == ContextMode.RAW:
             description = "Read a file. If file was read OK, it will be placed into the files context."
         super().__init__(name="read_file", description=description)
 
@@ -95,10 +95,7 @@ class ToolReadFile(Tool):
             return {path: "error", "error": f"Is not a file"}
 
         text = p.read_text()
-        if not context_mode():
-            return f">>> OK: READ {path}\n>>> === CONTENT START ===\n{text}\n>>> === CONTENT END ==="
-        else:
-            return update_context(path, text, "read_file")
+        return context_handler().update(path, text, "read_file")
 
 
 class ToolWriteFile(Tool):
@@ -111,7 +108,7 @@ class ToolWriteFile(Tool):
     def __call__(
         self,
         path: Annotated[str, "Project path to write to"],
-        content: Annotated[str, "Content to write"],
+        text: Annotated[str, "Content to write"],
     ):
         p = real_path(path)
 
@@ -121,13 +118,8 @@ class ToolWriteFile(Tool):
         if p.exists() and not p.is_file():
             return {path: "error", "error": f"File exists, but it is not a file"}
 
-        p.write_text(content)
-        sz = os.path.getsize(p)
-        lines = content.splitlines()
-        first_line = lines[0] if content else ""
-        if context_mode():
-            return update_context(path, content, "write_file")
-        return f">>> OK: WRITTEN {path} ({sz} bytes, {len(lines)} lines) \n>>> FIRST WRITTEN LINE: {first_line}"
+        p.write_text(text)
+        return context_handler().update(path, text, "write_file")
 
 
 class ToolDeleteFile(Tool):
@@ -146,9 +138,7 @@ class ToolDeleteFile(Tool):
             return {path: "error", "error": f"File does't exist"}
 
         p.unlink()
-        if context_mode() and path in CONTEXTS:
-            update_context(path, "(file deleted)", "delete_file")
-        return {path: "ok", "desc": f"File deleted"}
+        return context_handler().update(path, "(file deleted)", "delete_file")
 
 
 class ToolMkDir(Tool):
@@ -191,7 +181,7 @@ class ToolRmDir(Tool):
             return {path: "error", "error": f"Directory is not empty"}
 
         p.rmdir()
-        return {path: "ok", "desc": f"File deleted"}
+        return {path: "ok", "desc": f"Folder deleted"}
 
 
 class ToolEditFile(Tool):
@@ -227,10 +217,6 @@ class ToolEditFile(Tool):
         new_text = old_text.replace(replace_from, replace_with)
         p.write_text(new_text)
 
-        if context_mode():
-            return update_context(path, new_text, "edit_file")
-
-        return {
-            path: "ok",
-            "desc": f"Chunk replaced from `{repr(replace_from[:32])}`... to `{repr(replace_with[:32])}`...",
-        }
+        return context_handler().update(
+            path, new_text, "edit_file", edit_chunk=(replace_from, replace_with)
+        )

@@ -1,3 +1,6 @@
+* Cargo check should include cargo clippy
+
+
 * Making directory invisible
 
 Both for ls and api helper.
