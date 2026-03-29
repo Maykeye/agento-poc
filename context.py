@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import ClassVar, Optional, override
 from enum import StrEnum
 from typing import Protocol
-import re
+import config
 
 
 class LlmProto(Protocol):
@@ -64,7 +64,7 @@ class RawHandler(ContextHandler):
         if oper == "read_file":
             return f">>> OK: {oper} {path}\n>>> === CONTENT START ===\n{text}\n>>> === CONTENT END ==="
         elif oper == "write_file":
-            sz = Path(path).stat().st_size
+            sz = Path(config.real_path(path)).stat().st_size
             lines = text.splitlines()
             return f">>> OK: {oper} {path} ({sz} bytes, {len(lines)} lines)\n>>> FIRST WRITTEN LINE: {lines[0]}"
         elif oper == "delete_file":
@@ -169,7 +169,7 @@ class SuffixHandler(ContextHandler):
     @prefix.setter
     def prefix(self, value: str) -> None:
         """Set the prefix used for context markers."""
-        self._prefix = value
+        self._prefix = value or ">>>"
 
     @override
     def mode(self):
@@ -189,7 +189,7 @@ class SuffixHandler(ContextHandler):
         if oper == "read_file":
             return f"{pfx} ID: {new_id} OPERATION: {oper} CTX-IO-FILE:  {path}\n{pfx} === CONTENT START ===\n{text}\n{pfx} === CONTENT END ==="
         elif oper == "write_file":
-            sz = Path(path).stat().st_size
+            sz = Path(config.real_path(path)).stat().st_size
             lines = text.splitlines()
             return f"{pfx} ID: {new_id} OPERATION: {oper} CTX-IO-FILE:  {path}\n{pfx} OK: {oper} {path} ({sz} bytes, {len(lines)} lines)\n{pfx} === CONTENT START ===\n{text}\n{pfx} === CONTENT END ==="
         elif oper == "delete_file":
@@ -241,33 +241,59 @@ class SuffixHandler(ContextHandler):
 
     def _replace_old_content(self, content: str, path: str, current_id: str) -> str:
         """Replace old file content blocks with reference to current content."""
-        pfx = re.escape(self.prefix)
+        lines = content.splitlines()
+        result_lines: list[str] = []
+        i = 0
+        pfx = self.prefix
+        current_num = self._extract_id(current_id)
 
-        # Pattern 1: Match full content blocks (with CONTENT START/END)
-        # Allow optional extra lines (like ">>> OK: write_file ...") between header and content start
-        block_pattern = rf"({pfx} ID: CTX\(\d+\) OPERATION: \w+ CTX-IO-FILE:\s*{path})\s*\n(?:.*\s*\n)*?{pfx} === CONTENT START ===\s*\n(.*?)\s*\n{pfx} === CONTENT END ==="
+        print(f"Replace: {path=} {current_id=} {len(content)=}... ", end="", flush=True)
 
-        def replace_block_impl(match, n):
-            header = match.group(n)
-            id_match = re.search(r"CTX\((\d+)\)", header)
-            current_id_match = re.search(r"CTX\((\d+)\)", current_id)
-            if id_match and current_id_match:
-                old_num = int(id_match.group(1))
-                current_num = int(current_id_match.group(1))
-                if old_num < current_num:
-                    return f"{header}\n{self.prefix} === CURRENT CONTENT IN {current_id} ==="
-            return match.group(0)
+        while i < len(lines):
+            line = lines[i]
 
-        new_content = re.sub(
-            block_pattern, lambda m: replace_block_impl(m, 1), content, flags=re.DOTALL
-        )
+            # Check if this line starts a content block (has the prefix and CTX-IO-FILE)
+            if line.startswith(pfx) and "CTX-IO-FILE" in line and path in line:
+                # Check if this is an old ID that needs replacement
+                old_num = self._extract_id(line)
 
-        # Pattern 2: Also update existing "CURRENT CONTENT" references to point to new current_id
-        # Example: >>> ID: CTX(0) OPERATION: read_file CTX-IO-FILE:  .agento.demo.foo
-        #          >>> === CURRENT CONTENT IN CTX(1) ===
-        modern_ref_pattern = rf"(({pfx} ID: CTX\(\d+\) OPERATION: \w+ CTX-IO-FILE:\s*{path})\s*\n{pfx} === CURRENT CONTENT IN CTX\(\d+\) ===)"
-        new_content = re.sub(
-            modern_ref_pattern, lambda m: replace_block_impl(m, 2), new_content
-        )
+                if (
+                    old_num is not None
+                    and current_num is not None
+                    and old_num < current_num
+                ):
+                    # Found an old block, skip everything until CONTENT END
+                    header = line
+                    i += 1
 
-        return new_content.rstrip()
+                    # Skip lines until we find CONTENT END (must start with prefix)
+                    while i < len(lines):
+                        if (
+                            lines[i].startswith(pfx)
+                            and "=== CONTENT END ===" in lines[i]
+                        ):
+                            i += 1
+                            break
+                        i += 1
+
+                    # Add the header and new reference
+                    result_lines.append(header)
+                    result_lines.append(
+                        f"{pfx} === CURRENT CONTENT IN {current_id} ==="
+                    )
+                    continue
+
+            result_lines.append(line)
+            i += 1
+        print("...done")
+
+        return "\n".join(result_lines).rstrip()
+
+    def _extract_id(self, text: str) -> int | None:
+        """Extract CTX number from text like 'CTX(123)'."""
+        import re
+
+        match = re.search(r"CTX\((\d+)\)", text)
+        if match:
+            return int(match.group(1))
+        return None

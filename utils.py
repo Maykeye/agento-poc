@@ -5,6 +5,7 @@ from typing import Optional
 
 def read_text(path, default: Optional[str] = None):
     if default is not None and not Path(path).exists():
+        print(f"{path} doesn't exist, default is used")
         return default
 
     return Path(path).read_text()

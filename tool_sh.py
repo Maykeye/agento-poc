@@ -74,6 +74,17 @@ class ToolCargoCheck(Tool):
         return run_cargo("check", ["--tests"])
 
 
+class ToolCargoClippy(Tool):
+    def __init__(self):
+        super().__init__(
+            "cargo_clippy",
+            "Execute `cargo clippy` to check if project has code smells",
+        )
+
+    def __call__(self, args: Annotated[list, "arguments that go after `cargo clippy`"]):
+        return run_cargo("clippy", args)
+
+
 class ToolCargoTest(Tool):
     def __init__(self):
         super().__init__(

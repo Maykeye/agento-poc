@@ -49,6 +49,7 @@ class AgencyNode:
         llm.add_tool(tool_io.ToolLs())
         if self.lang == "rust":
             llm.add_tool(tool_sh.ToolCargoCheck())
+            llm.add_tool(tool_sh.ToolCargoClippy())
             llm.add_tool(tool_sh.ToolCargoTest())
             llm.add_tool(tool_sh.ToolRustApiInfo())
         if self.lang == "py":
@@ -68,9 +69,7 @@ class AgencyNode:
 
 
 def main():
-    # Keep context in one message: context mode means if we sent request to read files, the content of the file
-    # is inserted in the beginning of the prompt
-    set_context_mode(ContextMode.RAW)
+    set_context_mode(ContextMode.SUFFIX)
 
     # init IO
     config.read_config("~/.config/agento.json")
@@ -90,9 +89,10 @@ def main():
 
     # run
     print("Read only:", read_only)
-    node = AgencyNode(read_only=read_only, lang="py")
+    node = AgencyNode(read_only=read_only, lang="rust")
     node.simple(prompt)
-    tool_sh.rustfmt()
+    if node.lang == "rust":
+        tool_sh.rustfmt()
 
 
 if __name__ == "__main__":
