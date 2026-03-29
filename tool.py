@@ -4,6 +4,7 @@ import typing
 from typing import Annotated
 from dataclasses import dataclass, field
 import subprocess
+import os
 
 
 @dataclass
@@ -135,11 +136,16 @@ def empty_stdin():
 
 
 def run_executable(args: list[str]):
+    env = None
+    if not os.getenv("NODE_PATH"):
+        env = {"NODE_PATH": "/usr/lib/node_modules/"}
     try:
         # TODO: tee me
         print(">>> RUN:", args)
         with empty_stdin() as stdin:
-            p = subprocess.run(args, capture_output=True, text=True, stdin=stdin)
+            p = subprocess.run(
+                args, capture_output=True, text=True, stdin=stdin, env=env
+            )
         return {"exitcode": p.returncode, "stdout": p.stdout, "stderr": p.stderr}
     except Exception as ex:
         print(ex)

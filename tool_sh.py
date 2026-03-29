@@ -1,4 +1,5 @@
 # File with tools that run executables
+from pathlib import Path
 from tool import run_executable, Tool
 from typing import Annotated
 import config
@@ -129,6 +130,26 @@ class ToolRustApiInfo(Tool):
             return result
         stdout = result["stdout"].strip()
         return f"=== vvv API vvv ===\n{stdout}\n=== ^^^ API ^^^ ==="
+
+
+class ToolPupeeter(Tool):
+    def __init__(self) -> None:
+        return super().__init__(
+            "puppeteer",
+            "Run pupeeter against html file and returns all JS console output.",
+        )
+
+    def __call__(
+        self,
+        html_path: Annotated[
+            str,
+            "A project path to .html file to run in puppeteer to get the testing info",
+        ],
+    ):
+        full_path = Path(__file__).parent.resolve()
+        puppeteer_path = full_path / "tool_puppeteer_run.js"
+        all_args = [str(puppeteer_path), config.real_path(html_path)]
+        return run_executable(all_args)
 
 
 # TODO: promoto to the tool one day

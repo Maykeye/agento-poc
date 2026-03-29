@@ -54,6 +54,8 @@ class AgencyNode:
             llm.add_tool(tool_sh.ToolRustApiInfo())
         if self.lang == "py":
             llm.add_tool(tool_sh.ToolPythonUnittest())
+        if self.lang == "js":
+            llm.add_tool(tool_sh.ToolPupeeter())
         llm.add_tool(tool_sh.ToolGitDiff())
         llm.add_tool(tool_sh.ToolGitStatus())
         llm.add_tool(tool_sh.ToolGitAdd())
@@ -89,7 +91,7 @@ def main():
 
     # run
     print("Read only:", read_only)
-    node = AgencyNode(read_only=read_only, lang="rust")
+    node = AgencyNode(read_only=read_only, lang="nul")
     node.simple(prompt)
     if node.lang == "rust":
         tool_sh.rustfmt()
