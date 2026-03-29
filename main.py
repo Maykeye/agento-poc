@@ -91,7 +91,7 @@ def main():
 
     # run
     print("Read only:", read_only)
-    node = AgencyNode(read_only=read_only, lang="nul")
+    node = AgencyNode(read_only=read_only, lang="js")
     node.simple(prompt)
     if node.lang == "rust":
         tool_sh.rustfmt()
