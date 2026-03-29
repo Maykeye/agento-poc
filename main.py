@@ -16,7 +16,7 @@ class AgencyNode:
         self._llm: Optional[LLM] = None
         self.readonly = read_only
         self.lang = lang
-        assert self.lang in ["rust", "py"]
+        assert self.lang in ["rust", "py", "js", "nul", "null"]
 
     def _llm_initializers(self):
         if self.readonly:
