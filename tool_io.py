@@ -98,6 +98,24 @@ class ToolReadFile(Tool):
         return context_handler().update(path, text, "read_file")
 
 
+class ToolAppend(Tool):
+    def __init__(self):
+        super().__init__(
+            "append_to_file",
+            "Append text to the end of the file, leaving old as is",
+        )
+
+    def __call__(
+        self,
+        path: Annotated[str, "Project path to append to"],
+        text: Annotated[str, "New content to append"],
+    ):
+        write = ToolWriteFile()
+        old_text = real_path(path).read_text().removesuffix("\n")
+        full_text = old_text + "\n" + text.removeprefix("\n")
+        write(path, full_text)
+
+
 class ToolWriteFile(Tool):
     def __init__(self):
         super().__init__(

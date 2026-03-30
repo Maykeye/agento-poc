@@ -6,6 +6,7 @@ import tool_fork
 from utils import log_prompt, read_text
 import config
 import tool_io
+import tool_rpg
 import tool_sh
 import sys
 from context import set_context_mode, ContextMode
@@ -16,9 +17,12 @@ class AgencyNode:
         self._llm: Optional[LLM] = None
         self.readonly = read_only
         self.lang = lang
-        assert self.lang in ["rust", "py", "js", "nul", "null"]
+        assert self.lang in ["rust", "py", "js", "nul", "null", "rpg"]
 
     def _llm_initializers(self):
+        if self.lang == "rpg":
+            return [self._llm_rpg]
+
         if self.readonly:
             return [self._llm_reading]
         return [self._llm_reading, self._llm_editing]
@@ -34,6 +38,10 @@ class AgencyNode:
         for initializer in self._llm_initializers():
             initializer(llm)
         return llm
+
+    def _llm_rpg(self, llm: LLM):
+        llm.add_tool(tool_io.ToolAppend())
+        llm.add_tool(tool_rpg.ToolRollDice())
 
     def _llm_editing(self, llm: LLM):
         llm.add_tool(tool_io.ToolWriteFile())
