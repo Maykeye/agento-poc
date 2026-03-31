@@ -2,6 +2,36 @@ from pathlib import Path
 import subprocess
 from typing import Optional
 
+import config
+
+
+def expand_file(prompt_file: str, used_files: Optional[set[str]] = None):
+    def cmd(s: str, pfx: str):
+        if s.startswith(pfx):
+            return s[len(pfx) :].lstrip()
+        return None
+
+    used_files = used_files or set()
+    if prompt_file in used_files:
+        raise ValueError(f"looping {prompt_file}")
+
+    used_files.add(prompt_file)
+    prompt = read_text(prompt_file).strip()
+    lines = prompt.splitlines()
+    new = []
+
+    for line in lines:
+        if include := cmd(line, "@read "):
+            out = expand_file(include, used_files)
+            new += [out]
+        elif project := cmd(line, "@project_dir "):
+            config.set_project_directory(Path(project).resolve())
+        elif line.startswith("@"):
+            raise ValueError(f"Unknown command {line}")
+        else:
+            new += [line]
+    return "\n".join(new)
+
 
 def read_text(path, default: Optional[str] = None):
     if default is not None and not Path(path).exists():
@@ -36,6 +66,7 @@ def extract_tag(text: str, tag: str, strip=True) -> str:
 
 
 def log_prompt(project, prompt):
+    """Log used prompt for the project"""
     import sqlite3
     import datetime
 
@@ -43,8 +74,9 @@ def log_prompt(project, prompt):
     now = datetime.datetime.now(datetime.UTC).isoformat()
     with sqlite3.connect(p) as sql:
         sql.execute(
-            """CREATE TABLE IF NOT EXISTS log(project TEXT NOT NULL, log TEXT NOT NULL, created_at TEXT NOT NULL)"""
+            "CREATE TABLE IF NOT EXISTS log(project TEXT NOT NULL, log TEXT NOT NULL, created_at TEXT NOT NULL)"
         )
+        sql.execute("CREATE INDEX IF NOT EXISTS log_proj_idx ON log(project)")
         sql.execute(
             "INSERT INTO log(project, log, created_at) VALUES(?,?,?)",
             (project, prompt, now),

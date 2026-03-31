@@ -15,22 +15,13 @@ Examples:
 From these three models Qwen3.5-27B feels smartest but slowest.
 For example it helped implemented Suffix Context management.
 
-## Prompt
-The prompt is built from two files:
-intro.md that is inserted in the front of user prompt, and
-prompt.md that is inserted after intro.md
-The content of the files are are concatenated.
+## Prompt file
+To start using the tool call it using path to prompt file: `python main.py prompt.md`
 
-Another required file is ~/.config/agento.json that has structure like
+Files can contain extra commands at the start of the line (@ must be the first character):
 
-```json
-{
-    "project_directory": "/home/user/src/project-directory/"
-}
-```
-
-directory will be changed and "locked" to it.
-Use option --read-only to forbid writing to files(making directories, etc, only reading is allowed)
+* "@read intro.md" the line is replaced with the content of the file "intro.md". File "intro.md" is also expanded(i.e. it can include other files)
+* "@project_dir /home/user/src/project-directory/" sets the project directory which will be used for tools (if tool expects path, internally project directory is prepended to the path)
 
 ## Tools
 

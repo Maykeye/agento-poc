@@ -1,9 +1,10 @@
 #!/usr/bin/env python
+from pathlib import Path
 from typing import Optional
 
 from llm import LLM
 import tool_fork
-from utils import log_prompt, read_text
+from utils import log_prompt, expand_file
 import config
 import tool_io
 import tool_rpg
@@ -84,28 +85,25 @@ class AgencyNode:
 
 
 def main():
-    set_context_mode(ContextMode.SUFFIX)
+    set_context_mode(ContextMode.SUFFIX)  # TODO: add to @config?
 
-    # init IO
-    config.read_config("~/.config/agento.json")
+    # Parse initial prompt file
+    assert len(sys.argv) == 2
+    filename = sys.argv[1]
+    assert Path(filename).resolve().is_file()
 
     # Example of preventing editing DESIGN.md
-    # rusto.make_file_readonly("DESIGN.md")
+    # config.make_file_readonly("DESIGN.md")
+    # TODO: use it in prompt.md  as @readonly file?
 
     # read prompt
-    intro = read_text("intro.md", "")
-    prompt = read_text("prompt.md")
-    prompt = f"{intro}\n\n{prompt}".strip()
+    prompt = expand_file(filename)
+    assert config.project_directory().is_dir(), "set @project_dir in prompt"
+
     log_prompt(str(config.project_directory()), prompt)
 
-    # TODO: normal opt parse
-    read_only = sys.argv[1:] == ["--read-only"]
-    if not read_only and len(sys.argv) > 1:
-        raise ValueError("invalid opts. Use --read-only for R/O")
-
     # run
-    print("Read only:", read_only)
-    node = AgencyNode(read_only=read_only, lang="rpg")
+    node = AgencyNode(lang="rpg")
     node.simple(prompt)
     if node.lang == "rust":
         tool_sh.rustfmt()

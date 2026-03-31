@@ -1,28 +1,4 @@
 from pathlib import Path
-import json
-
-
-def read_config(path: str):
-    cfg_path = Path(path).expanduser()
-    if not cfg_path.exists():
-        raise ValueError(f"{path} doesn't exist, create json file there")
-    text = cfg_path.read_text()
-    try:
-        config = json.loads(text)
-
-        if not (project_directory := config.get("project_directory")):
-            raise ValueError(f"{path}: project_directory is not defined")
-
-        p = Path(project_directory)
-        if not p.exists() or not p.resolve().is_dir():
-            raise ValueError("not a directory")
-        set_project_directory(project_directory)
-
-    except Exception:
-        raise ValueError(
-            f'create {path} with {{"project_directory": "/path/to/existing/project_directory"}}'
-        )
-
 
 PROJECT_DIRECTORY_ = Path("<THE PROJECT DIRECTORY IS NOT SET>")
 """ Home project directory, a "root" of the project """
