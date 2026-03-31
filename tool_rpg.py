@@ -49,7 +49,7 @@ class ToolRollCheck(Tool):
     ):
         dice = roll("3d6") + bonus
         margin = dice - target
-        description = [
+        thresholds = [
             (6, "LEGENDARY", 3),
             (3, "STRONG", 2),
             (0, "SUCCESS", 1),
@@ -58,10 +58,10 @@ class ToolRollCheck(Tool):
             (-100, "DISASTER", -3),
         ]
 
-        for n, desc, degree in description:
+        for n, desc, degree in thresholds:
             if margin >= n:
                 return {
-                    "description": description,
+                    "description": brief_description,
                     "dice": dice,
                     "result": desc,
                     "degree": degree,

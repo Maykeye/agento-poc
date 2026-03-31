@@ -41,6 +41,8 @@ class AgencyNode:
 
     def _llm_rpg(self, llm: LLM):
         llm.add_tool(tool_io.ToolReadFile())
+        llm.add_tool(tool_io.ToolEditFile())
+        llm.add_tool(tool_io.ToolWriteFile())
         llm.add_tool(tool_io.ToolAppend())
         llm.add_tool(tool_rpg.ToolRollDice())
         llm.add_tool(tool_rpg.ToolRollCheck())
