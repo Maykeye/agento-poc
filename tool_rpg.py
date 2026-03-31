@@ -34,7 +34,7 @@ class ToolRollCheck(Tool):
     def __init__(self):
         super().__init__(
             "roll_check",
-            "Roll 3d6 with bonus against target number and get the result. Depending on margin (dice roll - target) it will be described as LEGENDARY(>=6), STRONG(>=3), SUCCESS(>=0), WEAK FAILURE(>= -3), STRONG FAILURE(>=-6), DISASTER(< -6)",
+            'Roll 3d6 with bonus against target number and get the result. Depending on margin (dice roll - target) it will be described as LEGENDARY(>=6), STRONG(>=3), SUCCESS(>=0), WEAK FAILURE(>= -3), STRONG FAILURE(>=-6), DISASTER(< -6). Each outcome has "degree" of success (from 3 for LEGENDARY to -3 for DISASTER)',
         )
 
     def __call__(
@@ -50,20 +50,21 @@ class ToolRollCheck(Tool):
         dice = roll("3d6") + bonus
         margin = dice - target
         description = [
-            (6, "LEGENDARY"),
-            (3, "STRONG"),
-            (0, "SUCCESS"),
-            (-3, "WEAK FAILURE"),
-            (-6, "STRONG FAILURE"),
-            (-100, "DISASTER"),
+            (6, "LEGENDARY", 3),
+            (3, "STRONG", 2),
+            (0, "SUCCESS", 1),
+            (-3, "WEAK FAILURE", -1),
+            (-6, "STRONG FAILURE", -2),
+            (-100, "DISASTER", -3),
         ]
 
-        for n, desc in description:
+        for n, desc, degree in description:
             if margin >= n:
                 return {
                     "description": description,
                     "dice": dice,
                     "result": desc,
+                    "degree": degree,
                     "margin": margin,
                 }
         raise ValueError("Should never be reached")
@@ -94,7 +95,7 @@ class ToolRollVersus(Tool):
         if lhs >= rhs:
             res["winner"] = lhs_description
         elif rhs >= lhs:
-            res["winner"] = lhs_description
+            res["winner"] = rhs_description
         else:
             return {"tie": True, "roll": lhs}
         return res
