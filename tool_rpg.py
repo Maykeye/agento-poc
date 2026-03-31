@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Any
 from tool import Tool
 import random
 
@@ -27,4 +27,74 @@ class ToolRollDice(Tool):
             'array of dice to roll with possible bonuses or penalty. Example: ["2d6", "-2d4", "4"] means "roll two dice with six faces, then roll two dice with four faces and subtract from the result(minus in the start), then add four to the result as a bonus(no roll)',
         ],
     ):
-        return sum(roll(x) for x in dice)
+        return {"dice": sum(roll(x) for x in dice)}
+
+
+class ToolRollCheck(Tool):
+    def __init__(self):
+        super().__init__(
+            "roll_check",
+            "Roll 3d6 with bonus against target number and get the result. Depending on margin (dice roll - target) it will be described as LEGENDARY(>=6), STRONG(>=3), SUCCESS(>=0), WEAK FAILURE(>= -3), STRONG FAILURE(>=-6), DISASTER(< -6)",
+        )
+
+    def __call__(
+        self,
+        brief_description: Annotated[
+            str, "Brief one-sentence description of the dice roll"
+        ],
+        bonus: Annotated[
+            int, "Bonus(>0) or penalty(<0) added to the roll. (0 if no bonus)"
+        ],
+        target: Annotated[int, "Target number"],
+    ):
+        dice = roll("3d6") + bonus
+        margin = dice - target
+        description = [
+            (6, "LEGENDARY"),
+            (3, "STRONG"),
+            (0, "SUCCESS"),
+            (-3, "WEAK FAILURE"),
+            (-6, "STRONG FAILURE"),
+            (-100, "DISASTER"),
+        ]
+
+        for n, desc in description:
+            if margin >= n:
+                return {
+                    "description": description,
+                    "dice": dice,
+                    "result": desc,
+                    "margin": margin,
+                }
+        raise ValueError("Should never be reached")
+
+
+class ToolRollVersus(Tool):
+    def __init__(self):
+        super().__init__(
+            "roll_vs",
+            "Roll 3d6 with bonuses for two parties of LHS and RHS and describe the result and decide the winner. Will return tie or the winner and margin of victory(always >=0)",
+        )
+
+    def __call__(
+        self,
+        lhs_description: Annotated[
+            str, 'One sentence description of LHS, example: "Frodo: aims at Gollm"'
+        ],
+        lhs_bonus: Annotated[int, "Bonus(>0) or penalty(<0) added to LHS roll"],
+        rhs_description: Annotated[
+            str, 'One sentence description of RHS, example: "Gollms: dodges the attack"'
+        ],
+        rhs_bonus: Annotated[int, "Bonus(>0) or penalty(<0) added to RHS roll"],
+    ):
+        lhs = roll("3d6") + lhs_bonus
+        rhs = roll("3d6") + rhs_bonus
+
+        res: dict[str, Any] = {"lhs": lhs, "rhs": rhs, "margin": abs(lhs - rhs)}
+        if lhs >= rhs:
+            res["winner"] = lhs_description
+        elif rhs >= lhs:
+            res["winner"] = lhs_description
+        else:
+            return {"tie": True, "roll": lhs}
+        return res

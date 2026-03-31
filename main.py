@@ -40,8 +40,11 @@ class AgencyNode:
         return llm
 
     def _llm_rpg(self, llm: LLM):
+        llm.add_tool(tool_io.ToolReadFile())
         llm.add_tool(tool_io.ToolAppend())
         llm.add_tool(tool_rpg.ToolRollDice())
+        llm.add_tool(tool_rpg.ToolRollCheck())
+        llm.add_tool(tool_rpg.ToolRollVersus())
 
     def _llm_editing(self, llm: LLM):
         llm.add_tool(tool_io.ToolWriteFile())
@@ -93,13 +96,14 @@ def main():
     prompt = f"{intro}\n\n{prompt}".strip()
     log_prompt(str(config.project_directory()), prompt)
 
+    # TODO: normal opt parse
     read_only = sys.argv[1:] == ["--read-only"]
     if not read_only and len(sys.argv) > 1:
         raise ValueError("invalid opts. Use --read-only for R/O")
 
     # run
     print("Read only:", read_only)
-    node = AgencyNode(read_only=read_only, lang="js")
+    node = AgencyNode(read_only=read_only, lang="rpg")
     node.simple(prompt)
     if node.lang == "rust":
         tool_sh.rustfmt()
