@@ -113,7 +113,7 @@ class ToolAppend(Tool):
         write = ToolWriteFile()
         old_text = real_path(path).read_text().removesuffix("\n")
         full_text = old_text + "\n" + text.removeprefix("\n")
-        write(path, full_text)
+        return write(path, full_text)
 
 
 class ToolWriteFile(Tool):
