@@ -271,17 +271,24 @@ class LLMVerbose:
     def __call__(self, data: dict, finish_reason=None):
         self.data.append(data)
         REASONING = "reasoning_content"
+        TOOL_CALL = "tool_call"
         CONTENT = "content"
 
         if finish_reason:
             print(self.RESET, end="" if self.last.endswith("\n") else "\n")
             return
 
-        if (data.get("tool_calls")) is not None:
-            self.last_type = "tool_calls"
-            self.last = ""
-            if text := data.get("arguments"):
-                print(self.TOOL_CALL + text, flush=True, end="")
+        if (calls := data.get("tool_calls")) is not None:
+            if self.last_type != TOOL_CALL:
+                if not self.last.endswith("\n"):
+                    print()
+            self.last_type = TOOL_CALL
+            call = calls[0]
+
+            argument = call.get("function", {}).get("arguments", "")
+            if argument:
+                print(self.TOOL_CALL + argument, flush=True, end="")
+                self.last = argument
             return
 
         if (text := data.get(REASONING)) is not None:
@@ -289,6 +296,7 @@ class LLMVerbose:
                 self.last_type = REASONING
                 text = self.REASONING + text
             print(text, flush=True, end="")
+            self.last = text
             return
 
         if (text := data.get(CONTENT)) is not None:
@@ -298,4 +306,5 @@ class LLMVerbose:
                 self.last_type = CONTENT
                 text = self.CONTENT + text
             print(text, flush=True, end="")
+            self.last = text
             return
