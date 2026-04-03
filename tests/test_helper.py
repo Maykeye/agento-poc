@@ -1,0 +1,235 @@
+import unittest
+import os
+from pathlib import Path
+import json
+
+import config
+import tool_io
+from context import context_handler
+from llm import LLM, LlmInstace, ToolCall
+from typing import Any, Callable, Optional
+
+
+def tmpfilename(name: str) -> Path:
+    return Path(f"/run/user/{os.getuid()}/{name}")
+
+
+class TestBase(unittest.TestCase):
+    FILE_FOO = tmpfilename(".agento.demo.foo")
+    FILE_BAR = tmpfilename(".agento.demo.bar")
+    ID = 1000
+
+    def init_test_llm(self):
+        """Initialize LLM for the test."""
+        dummy_llm, msgs = self.init_llm_msgs()
+        msgs.append(dummy_llm.msg_user("Test operations"))
+        return dummy_llm, msgs
+
+    def setUp(self):
+        os.chdir(tmpfilename(""))
+        self.tearDown()
+        config.set_project_directory(tmpfilename(""), silent=True)
+        LLM.INSTANCES.clear()
+        self.FILE_FOO.write_text("foo\ntext")
+        self.FILE_BAR.write_text("bar\nvalue")
+
+    def tearDown(self):
+        self.FILE_FOO.unlink(True)
+        self.FILE_BAR.unlink(True)
+
+    def tool_call_read(self, path: Path) -> Any:
+        context_handler().prepare_current_llm(LLM.INSTANCES[-1].llm)
+        self.ID += 1
+        msgs = LLM.INSTANCES[-1].messages
+        msgs.append(
+            ToolCall(
+                function="read_file",
+                arguments=json.dumps({"path": path.name}),
+                id=f"id{self.ID}",
+            ).llm_func_call_info()
+        )
+        res = tool_io.ToolReadFile()(path.name)
+        return self.append_tool_call_result("read_file", msgs, res)
+
+    def tool_call_write(self, path: Path, text: str) -> Any:
+        context_handler().prepare_current_llm(LLM.INSTANCES[-1].llm)
+        self.ID += 1
+        msgs = LLM.INSTANCES[-1].messages
+        msgs.append(
+            ToolCall(
+                function="write_file",
+                arguments=json.dumps({"path": path.name, "text": text}),
+                id=f"id{self.ID}",
+            ).llm_func_call_info()
+        )
+        res = tool_io.ToolWriteFile()(path.name, text)
+        return self.append_tool_call_result("read_file", msgs, res)
+
+    def tool_call_delete_foo(self) -> Any:
+        context_handler().prepare_current_llm(LLM.INSTANCES[-1].llm)
+        self.ID += 1
+        msgs = LLM.INSTANCES[-1].messages
+        msgs.append(
+            ToolCall(
+                function="delete_file",
+                arguments=json.dumps({"path": self.FILE_FOO.name}),
+                id=f"id{self.ID}",
+            ).llm_func_call_info()
+        )
+        res = tool_io.ToolDeleteFile()(self.FILE_FOO.name)
+        return self.append_tool_call_result("delete_file", msgs, res)
+
+    def tool_call_edit_foo(self, replace_from: str, replace_with: str) -> Any:
+        context_handler().prepare_current_llm(LLM.INSTANCES[-1].llm)
+        self.ID += 1
+        msgs = LLM.INSTANCES[-1].messages
+        msgs.append(
+            ToolCall(
+                function="edit_file",
+                arguments=json.dumps(
+                    {
+                        "path": self.FILE_FOO.name,
+                        "replace_from": replace_from,
+                        "replace_with": replace_with,
+                    }
+                ),
+                id=f"id{self.ID}",
+            ).llm_func_call_info()
+        )
+        res = tool_io.ToolEditFile()(self.FILE_FOO.name, replace_from, replace_with)
+        return self.append_tool_call_result("edit_file", msgs, res)
+
+    def tool_call_add_fold(
+        self,
+        path: Path,
+        position: str,
+        pattern: str,
+        name: str,
+    ) -> Any:
+        """Call the file_add_fold tool."""
+        context_handler().prepare_current_llm(LLM.INSTANCES[-1].llm)
+        self.ID += 1
+        msgs = LLM.INSTANCES[-1].messages
+        msgs.append(
+            ToolCall(
+                function="file_add_fold",
+                arguments=json.dumps(
+                    {
+                        "path": path.name,
+                        "position": position,
+                        "pattern": pattern,
+                        "name": name,
+                    }
+                ),
+                id=f"id{self.ID}",
+            ).llm_func_call_info()
+        )
+        res = tool_io.ToolFoldAdd()(path.name, position, pattern, name)
+        return self.append_tool_call_result("file_add_fold", msgs, res)
+
+    def tool_call_unfold(self, path, name: str):
+        """Call the file_unfold tool."""
+
+        context_handler().prepare_current_llm(LLM.INSTANCES[-1].llm)
+        self.ID += 1
+        msgs = LLM.INSTANCES[-1].messages
+        msgs.append(
+            ToolCall(
+                function="file_unfold",
+                arguments=json.dumps({"path": path.name, "name": name}),
+                id=f"id{self.ID}",
+            ).llm_func_call_info()
+        )
+        res = tool_io.ToolUnfold()(path.name, name)
+        return self.append_tool_call_result("file_unfold", msgs, res)
+
+    def tool_call_unfold_all(self, path):
+        """Call the file_unfold_all tool."""
+
+        context_handler().prepare_current_llm(LLM.INSTANCES[-1].llm)
+        self.ID += 1
+        msgs = LLM.INSTANCES[-1].messages
+        msgs.append(
+            ToolCall(
+                function="file_unfold_all",
+                arguments=json.dumps({"path": path.name}),
+                id=f"id{self.ID}",
+            ).llm_func_call_info()
+        )
+        res = tool_io.ToolUnfoldAll()(path.name)
+        return self.append_tool_call_result("file_unfold_all", msgs, res)
+
+    def tool_call_with_check(
+        self,
+        tool_func: Callable,
+        tool_args: tuple = (),
+        expected_ctx_id: Optional[int] = None,
+        check_items: Optional[list[str]] = None,
+    ) -> Any:
+        """Helper to call a tool with assistant message and validate response.
+
+        Uses LLM.INSTANCES[-1].llm and LLM.INSTANCES[-1].messages directly.
+
+        Args:
+            tool_func: The tool call function to invoke
+            tool_args: Arguments to pass to tool_func (after msgs)
+            expected_ctx_id: Expected context ID to check for (e.g., CTX(0))
+            check_items: List of strings to assert are present in response
+
+        Returns:
+            The tool call result
+        """
+        llm = LLM.INSTANCES[-1].llm
+        msgs = LLM.INSTANCES[-1].messages
+        msgs.append(llm.msg_assistant(f"{tool_func}"))
+        res = tool_func(*tool_args)
+        if expected_ctx_id is not None:
+            self.assertIn(f"CTX({expected_ctx_id})", res)
+        if check_items:
+            for item in check_items:
+                self.assertIn(item, res)
+        return res
+
+    def tool_call_write_with_check(self, path: Path, expected_ctx_id: int, text: str):
+        check_items = ["\n>>> === CONTENT START ===", text]
+        return self.tool_call_with_check(
+            self.tool_call_write,
+            tool_args=(path, text),
+            expected_ctx_id=expected_ctx_id,
+            check_items=check_items,
+        )
+
+    def tool_call_read_with_check(
+        self, path: Path, expected_ctx_id: int, content_to_check: str = ""
+    ):
+        check_items = ["\n>>> === CONTENT START ==="]
+        if content_to_check:
+            check_items.append(content_to_check)
+        return self.tool_call_with_check(
+            self.tool_call_read,
+            tool_args=(path,),
+            expected_ctx_id=expected_ctx_id,
+            check_items=check_items,
+        )
+
+    def append_tool_call_result(self, func: str, msgs: list[dict], result: str | dict):
+        msgs.append(
+            {
+                "role": "tool",
+                "tool_call_id": self.ID,
+                "name": func,
+                "content": result,
+            }
+        )
+        return msgs[-1]["content"]
+
+    def epilogue(self):
+        context_handler().prepare_current_llm(LLM.INSTANCES[-1].llm)
+        LLM.INSTANCES[-1].messages.append(LLM.INSTANCES[-1].llm.msg_assistant("Done"))
+
+    def init_llm_msgs(self) -> tuple[LLM, list[dict]]:
+        dummy_llm = LLM()
+        dummy_llm.INSTANCES.append(LlmInstace(dummy_llm, []))
+        dummy_llm.add_tool(tool_io.ToolReadFile())
+        msgs = dummy_llm.INSTANCES[-1].messages
+        return (dummy_llm, msgs)

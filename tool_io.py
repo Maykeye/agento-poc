@@ -1,11 +1,10 @@
 from pathlib import Path
 from typing import Annotated
-from pathlib import Path
 import os
 from config import real_path, READ_ONLY_FILES, READ_ONLE_ERROR
 from tool import Tool
 import re
-from context import CONTEXTS, ContextMode, context_handler
+from context import ContextMode, context_handler
 
 # TODO: import logging.basicConfig(level=logging.INFO)
 
@@ -133,6 +132,14 @@ class ToolWriteFile(Tool):
         if p in READ_ONLY_FILES:
             return {path: "error", "error": READ_ONLE_ERROR}
 
+        # Check if there are any folds on this file
+        handler = context_handler()
+        if handler.has_folds(path):
+            return {
+                path: "error",
+                "error": f"Cannot write file with active folds. Use file_unfold or file_unfold_all first.",
+            }
+
         if p.exists() and not p.is_file():
             return {path: "error", "error": f"File exists, but it is not a file"}
 
@@ -155,6 +162,7 @@ class ToolDeleteFile(Tool):
         if not p.exists():
             return {path: "error", "error": f"File does't exist"}
 
+        ToolUnfoldAll()(path)
         p.unlink()
         return context_handler().update(path, "(file deleted)", "delete_file")
 
@@ -223,18 +231,95 @@ class ToolEditFile(Tool):
             return {path: "error", "error": f"File exists, but it is not a file"}
 
         old_text = p.read_text()
-        idx1 = old_text.find(replace_from)
-        if idx1 == -1:
-            return {path: "error", "error": f"Can not find `{repr(replace_from)}`"}
-        idx2 = old_text.find(replace_from, idx1 + len(replace_from))
-        if idx2 != -1:
-            return {
-                path: "error",
-                "error": f"`{repr(replace_from)}` must exists exactly once",
-            }
-        new_text = old_text.replace(replace_from, replace_with)
+        handler = context_handler()
+        
+        # If file has folds, we need to check uniqueness in visible content only
+        if handler.has_folds(path):
+            # Validate that the edit target is visible and unique in visible content
+            is_valid, error_msg = handler.validate_edit_in_visible_content(path, replace_from)
+            if not is_valid:
+                return {path: "error", "error": error_msg}
+            
+            # Text exists exactly once in visible content - proceed with edit
+            # First, check if text exists in the actual file (already validated above)
+            idx1 = old_text.find(replace_from)
+            if idx1 == -1:
+                return {path: "error", "error": f"Can not find `{repr(replace_from)}`"}
+            
+            # Replace only the first occurrence (which is in visible content)
+            new_text = old_text.replace(replace_from, replace_with, 1)
+        else:
+            # No folds - use traditional uniqueness check
+            idx1 = old_text.find(replace_from)
+            if idx1 == -1:
+                return {path: "error", "error": f"Can not find `{repr(replace_from)}`"}
+            idx2 = old_text.find(replace_from, idx1 + len(replace_from))
+            if idx2 != -1:
+                return {
+                    path: "error",
+                    "error": f"`{repr(replace_from)}` must exists exactly once",
+                }
+            new_text = old_text.replace(replace_from, replace_with)
+
+        # Write the new text to the file
         p.write_text(new_text)
 
-        return context_handler().update(
+        # Update fold line numbers if the edit changed the line count
+        old_line_count = len(old_text.splitlines())
+        new_line_count = len(new_text.splitlines())
+        if handler.has_folds(path):
+            handler.update_fold_line_numbers(path, old_line_count, new_line_count)
+
+        # Update the context with new content
+        return handler.update(
             path, new_text, "edit_file", edit_chunk=(replace_from, replace_with)
         )
+
+
+class ToolFoldAdd(Tool):
+    def __init__(self):
+        super().__init__(
+            "file_add_fold",
+            "Add a fold to hide file content in the LLM context. Use 'head' for top of file or 'tail' for bottom.",
+        )
+
+    def __call__(
+        self,
+        path: Annotated[str, "Project path to add fold to"],
+        position: Annotated[str, "'head' for top of file, 'tail' for bottom"],
+        pattern: Annotated[str, "Text pattern to match for folding"],
+        name: Annotated[str, "Unique name for this fold"],
+    ):
+        return context_handler().add_fold(path, position, pattern, name)
+
+
+class ToolUnfold(Tool):
+    def __init__(self):
+        super().__init__(
+            "file_unfold",
+            "Remove a specific fold by name from a file.",
+        )
+
+    def __call__(
+        self,
+        path: Annotated[str, "Project path to unfold"],
+        name: Annotated[str, "Name of the fold to remove"],
+    ):
+        return context_handler().unfold(path, name)
+
+
+class ToolUnfoldAll(Tool):
+    def __init__(self):
+        super().__init__(
+            "file_unfold_all",
+            "Remove all folds from a file.",
+        )
+
+    def __call__(
+        self,
+        path: Annotated[str, "Project path to unfold all"],
+    ):
+        handler = context_handler()
+
+        result = handler.unfold_all(path)
+        return result

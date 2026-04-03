@@ -16,6 +16,20 @@ def project_directory():
     return PROJECT_DIRECTORY_
 
 
+def guess_project_language():
+    files = list(project_directory().glob("*"))
+    if "Cargo.toml" in files:
+        return "rust"
+    if any(file.name.endswith(".py") for file in files):
+        return "py"
+    if any(file.name.endswith(".js") for file in files):
+        return "js"
+    if project_directory() / "static" / "index.html":
+        return "js"
+    print(f"WARNING! NO LANGUAGE DETECTED IN {project_directory()}")
+    return "nul"
+
+
 READ_ONLY_FILES = []
 READ_ONLE_ERROR = """FATAL ERRROR. 
 You are NOT allowed to edit this file.

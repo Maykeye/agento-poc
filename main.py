@@ -55,6 +55,7 @@ class AgencyNode:
         llm.add_tool(tool_io.ToolDeleteFile())
         llm.add_tool(tool_io.ToolMkDir())
         llm.add_tool(tool_io.ToolRmDir())
+        llm.add_tool(tool_sh.ToolGitAdd())
         if self.lang == "rust":
             llm.add_tool(tool_sh.ToolCargoAdd())
 
@@ -72,7 +73,6 @@ class AgencyNode:
             llm.add_tool(tool_sh.ToolPupeeter())
         llm.add_tool(tool_sh.ToolGitDiff())
         llm.add_tool(tool_sh.ToolGitStatus())
-        llm.add_tool(tool_sh.ToolGitAdd())
         llm.add_tool(tool_fork.ToolFork())
 
     def simple(self, user_prompt: str):
@@ -103,7 +103,7 @@ def main():
     log_prompt(str(config.project_directory()), prompt)
 
     # run
-    node = AgencyNode(lang="rpg")
+    node = AgencyNode(lang=config.guess_project_language())
     node.simple(prompt)
     if node.lang == "rust":
         tool_sh.rustfmt()
