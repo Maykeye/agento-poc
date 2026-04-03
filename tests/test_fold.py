@@ -32,8 +32,8 @@ fn ipsum() -> i32 {1}
         self.FILE_FOO.write_text(test_content)
         return test_content
 
-    def test_add_fold_head(self):
-        """Test adding a fold at the head of the file."""
+    def test_add_fold_basic(self):
+        """Test adding a fold with start and end patterns."""
         _, messages = self.init_test_llm()
         self.init_test_file()
 
@@ -42,15 +42,18 @@ fn ipsum() -> i32 {1}
         read_msg_idx = len(messages) - 1
         self.assertIn("struct FooBar(i32);", res)
 
-        # Add a fold at the head using the tool
+        # Add a fold using line numbers
         fold_result = self.tool_call_add_fold(
-            self.FILE_FOO, "head", "struct FooBar(i32);", "Helper functions structs"
+            self.FILE_FOO,
+            3, "struct Foo(i32);",
+            4, "struct FooBar(i32);",
+            "Struct definitions",
         )
 
         # Check fold was added successfully
         self.assertIsInstance(fold_result, str)
-        self.assertIn("Added fold 'Helper functions structs'", fold_result)
-        self.assertIn("lines 1..4", fold_result)
+        self.assertIn("Added fold 'Struct definitions'", fold_result)
+        self.assertIn("lines 3..4", fold_result)
 
         # Call epilogue to trigger prepare_current_llm which applies folding
         self.epilogue()
@@ -60,15 +63,15 @@ fn ipsum() -> i32 {1}
         content = read_msg["content"]
 
         # Check that the content now contains the fold marker
-        self.assertIn(">>> FOLD: Helper functions structs (lines 1..4)", content)
+        self.assertIn(">>> FOLD: Struct definitions (lines 3..4)", content)
         # Original hidden content should not be in the message
-        self.assertNotIn("use a::{b,c};", content)
+        self.assertNotIn("struct Foo(i32);", content)
         self.assertNotIn("struct FooBar(i32);", content)
         # Visible content should still be there
         self.assertIn("fn main()", content)
 
-    def test_add_fold_tail(self):
-        """Test adding a fold at the tail of the file."""
+    def test_add_fold_multiple_lines(self):
+        """Test adding a fold that spans multiple lines."""
         _, messages = self.init_test_llm()
         self.init_test_file()
 
@@ -76,9 +79,9 @@ fn ipsum() -> i32 {1}
         self.tool_call_read_with_check(self.FILE_FOO, 0)
         read_msg_idx = len(messages) - 1
 
-        # Add a fold at the tail using the tool
+        # Add a fold that spans from helper function to end
         fold_result = self.tool_call_add_fold(
-            self.FILE_FOO, "tail", "fn lorem()", "Lorem/ipsum implementation"
+            self.FILE_FOO, 13, "fn lorem()", 14, "fn ipsum()", "Lorem/ipsum implementation"
         )
 
         # Check fold was added successfully
@@ -110,26 +113,17 @@ fn ipsum() -> i32 {1}
         self.tool_call_read_with_check(self.FILE_FOO, 0)
         read_msg_idx = len(messages) - 1
 
-        # Add head fold using the tool
+        # Add first fold - struct definitions
         fold_result1 = self.tool_call_add_fold(
-            self.FILE_FOO, "head", "struct FooBar(i32);", "Helper functions structs"
+            self.FILE_FOO, 3, "struct Foo(i32);", 4, "struct FooBar(i32);", "Struct definitions",
         )
-        self.assertIn("Added fold 'Helper functions structs'", fold_result1)
+        self.assertIn("Added fold 'Struct definitions'", fold_result1)
 
-        # Add tail fold using the tool
+        # Add second fold - helper functions at the bottom
         fold_result2 = self.tool_call_add_fold(
-            self.FILE_FOO, "tail", "fn lorem()", "Lorem/ipsum implementation"
+            self.FILE_FOO, 13, "fn lorem()", 14, "fn ipsum()", "Helper functions"
         )
-        self.assertIn("Added fold 'Lorem/ipsum implementation'", fold_result2)
-
-        # Add another head fold using the tool
-        fold_result3 = self.tool_call_add_fold(
-            self.FILE_FOO, "head", "// The main", "Main() comments"
-        )
-        self.assertIn("Added fold 'Main() comments'", fold_result3)
-        # The fold should start after the previous head fold (line 4) + 1 buffer line (line 5)
-        # So the fold should be lines 6..6
-        self.assertIn("lines 6..6", fold_result3)
+        self.assertIn("Added fold 'Helper functions'", fold_result2)
 
         # Call epilogue to trigger prepare_current_llm which applies folding
         self.epilogue()
@@ -139,56 +133,33 @@ fn ipsum() -> i32 {1}
         content = read_msg["content"]
 
         # Check all folds are applied
-        self.assertIn(">>> FOLD: Helper functions structs (lines 1..4)", content)
-        self.assertIn(">>> FOLD: Main() comments (lines 6..6)", content)
-        self.assertIn(">>> FOLD: Lorem/ipsum implementation (lines 13..14)", content)
+        self.assertIn(">>> FOLD: Struct definitions (lines 3..4)", content)
+        self.assertIn(">>> FOLD: Helper functions (lines 13..14)", content)
         # Visible content should still be there
+        self.assertIn("use a::{b,c};", content)
         self.assertIn("fn main()", content)
         # Hidden content should not be visible
         self.assertNotIn("struct FooBar(i32);", content)
         self.assertNotIn("fn lorem() -> i32 {1}", content)
 
-    def test_add_fold_overlapping_head_tail(self):
-        """Test that overlapping head and tail folds are rejected."""
+    def test_add_fold_overlapping_rejected(self):
+        """Test that overlapping folds are rejected."""
         self.init_test_llm()
         self.init_test_file()
 
         # Read the file first
         self.tool_call_read_with_check(self.FILE_FOO, 0)
 
-        # Add a head fold that goes deep using the tool
+        # Add a fold using the tool
         fold_result1 = self.tool_call_add_fold(
-            self.FILE_FOO, "head", "return;", "Top section"
+            self.FILE_FOO, 3, "struct Foo(i32);", 4, "struct FooBar(i32);", "First fold"
         )
-        self.assertIn("Added fold 'Top section'", fold_result1)
+        self.assertIn("Added fold 'First fold'", fold_result1)
 
-        # Try to add a tail fold that would overlap (pattern before the head fold ends)
+        # Try to add another fold that would overlap
+        # This would span lines that overlap with the first fold
         fold_result2 = self.tool_call_add_fold(
-            self.FILE_FOO, "tail", "fn main()", "Main function"
-        )
-
-        # This should fail due to overlap
-        self.assertIsInstance(fold_result2, dict)
-        self.assertIn("error", fold_result2)
-
-    def test_add_fold_overlapping_same_position(self):
-        """Test that overlapping folds at the same position are rejected."""
-        self.init_test_llm()
-        self.init_test_file()
-
-        # Read the file first
-        self.tool_call_read_with_check(self.FILE_FOO, 0)
-
-        # Add a head fold using the tool
-        fold_result1 = self.tool_call_add_fold(
-            self.FILE_FOO, "head", "struct FooBar(i32);", "First head fold"
-        )
-        self.assertIn("Added fold 'First head fold'", fold_result1)
-
-        # Try to add another head fold that would overlap
-        # Pattern "struct Foo" appears before "struct FooBar", so would overlap
-        fold_result2 = self.tool_call_add_fold(
-            self.FILE_FOO, "head", "struct Foo(i32);", "Second head fold"
+            self.FILE_FOO, 1, "use a::", 5, "// The main", "Overlapping fold"
         )
 
         # This should fail due to overlap
@@ -198,7 +169,7 @@ fn ipsum() -> i32 {1}
     def test_add_fold_no_space_between_folds(self):
         """Test that folds with no raw line between them are rejected."""
         self.init_test_llm()
-        # Create a file where head and tail folds would touch
+        # Create a file where two folds would touch
         test_content = """line1
 line2
 line3
@@ -215,15 +186,15 @@ fn helper() {
         # Read the file first
         self.tool_call_read_with_check(self.FILE_FOO, 0)
 
-        # Add a head fold ending at line 4 using the tool
+        # Add a fold ending at line 4
         fold_result1 = self.tool_call_add_fold(
-            self.FILE_FOO, "head", "line4", "First fold"
+            self.FILE_FOO, 1, "line1", 4, "line4", "First fold"
         )
         self.assertIn("Added fold 'First fold'", fold_result1)
 
-        # Try to add a tail fold starting at line 5 (no buffer line)
+        # Try to add a fold starting at line 5 (no buffer line)
         fold_result2 = self.tool_call_add_fold(
-            self.FILE_FOO, "tail", "fn main()", "Second fold"
+            self.FILE_FOO, 5, "fn main()", 6, "return;", "Second fold"
         )
 
         # This should fail due to no buffer line between folds
@@ -240,13 +211,13 @@ fn helper() {
 
         # Add a fold using the tool
         fold_result1 = self.tool_call_add_fold(
-            self.FILE_FOO, "head", "struct FooBar(i32);", "MyFold"
+            self.FILE_FOO, 3, "struct Foo(i32);", 4, "struct FooBar(i32);", "MyFold"
         )
         self.assertIn("Added fold 'MyFold'", fold_result1)
 
-        # Try to add another fold with the same name using the tool
+        # Try to add another fold with the same name
         fold_result2 = self.tool_call_add_fold(
-            self.FILE_FOO, "tail", "fn lorem()", "MyFold"
+            self.FILE_FOO, 13, "fn lorem()", 14, "fn ipsum()", "MyFold"
         )
 
         # This should fail due to duplicate name
@@ -254,23 +225,41 @@ fn helper() {
         self.assertIn("error", fold_result2)
         self.assertIn("already exists", fold_result2["error"])
 
-    def test_add_fold_nonexistent_pattern(self):
-        """Test that adding a fold with a non-existent pattern fails."""
+    def test_add_fold_nonexistent_start_line(self):
+        """Test that adding a fold with a non-existent start line fails."""
         self.init_test_llm()
         self.init_test_file()
 
         # Read the file first
         self.tool_call_read_with_check(self.FILE_FOO, 0)
 
-        # Try to add a fold with a pattern that doesn't exist
+        # Try to add a fold with a line number that doesn't exist
         fold_result = self.tool_call_add_fold(
-            self.FILE_FOO, "head", "nonexistent_pattern_xyz", "MyFold"
+            self.FILE_FOO, 99, "nonexistent", 100, "pattern", "MyFold"
         )
 
         # This should fail
         self.assertIsInstance(fold_result, dict)
         self.assertIn("error", fold_result)
-        self.assertIn("No lines matching pattern", fold_result["error"])
+        self.assertIn("out of range", fold_result["error"])
+
+    def test_add_fold_line_mismatch(self):
+        """Test that adding a fold with mismatched line text fails."""
+        self.init_test_llm()
+        self.init_test_file()
+
+        # Read the file first
+        self.tool_call_read_with_check(self.FILE_FOO, 0)
+
+        # Try to add a fold with line text that doesn't match the actual line
+        fold_result = self.tool_call_add_fold(
+            self.FILE_FOO, 3, "wrong text", 4, "struct FooBar(i32);", "MyFold"
+        )
+
+        # This should fail
+        self.assertIsInstance(fold_result, dict)
+        self.assertIn("error", fold_result)
+        self.assertIn("does not match", fold_result["error"])
 
     def test_add_fold_file_not_in_context(self):
         """Test that adding a fold to a file not in context fails."""
@@ -278,12 +267,9 @@ fn helper() {
         self.init_test_llm()
         self.init_test_file()
 
-        # Read the file first to set up context
-        self.tool_call_read_with_check(self.FILE_FOO, 0)
-
         nonexistent_path = Path("nonexistent_file.txt")
         fold_result = self.tool_call_add_fold(
-            nonexistent_path, "head", "some_pattern", "MyFold"
+            nonexistent_path, 1, "some_text", 2, "other_text", "MyFold"
         )
 
         # This should fail
@@ -300,18 +286,18 @@ fn helper() {
         self.tool_call_read_with_check(self.FILE_FOO, 0)
         read_msg_idx = len(messages) - 1
 
-        # Add two folds using the tool
+        # Add two folds
         fold_result1 = self.tool_call_add_fold(
-            self.FILE_FOO, "head", "struct FooBar(i32);", "HeadFold"
+            self.FILE_FOO, 3, "struct Foo(i32);", 4, "struct FooBar(i32);", "HeadFold"
         )
         self.assertIn("Added fold 'HeadFold'", fold_result1)
 
         fold_result2 = self.tool_call_add_fold(
-            self.FILE_FOO, "tail", "fn lorem()", "TailFold"
+            self.FILE_FOO, 13, "fn lorem()", 14, "fn ipsum()", "TailFold"
         )
         self.assertIn("Added fold 'TailFold'", fold_result2)
 
-        # Unfold the tail fold using the tool
+        # Unfold the tail fold
         unfold_result = self.tool_call_unfold(self.FILE_FOO, "TailFold")
         self.assertIn("Removed fold 'TailFold'", unfold_result)
 
@@ -352,18 +338,18 @@ fn helper() {
         self.tool_call_read_with_check(self.FILE_FOO, 0)
         read_msg_idx = len(messages) - 1
 
-        # Add multiple folds using the tool
+        # Add multiple folds
         fold_result1 = self.tool_call_add_fold(
-            self.FILE_FOO, "head", "struct FooBar(i32);", "HeadFold"
+            self.FILE_FOO, 3, "struct Foo(i32);", 4, "struct FooBar(i32);", "HeadFold"
         )
         self.assertIn("Added fold 'HeadFold'", fold_result1)
 
         fold_result2 = self.tool_call_add_fold(
-            self.FILE_FOO, "tail", "fn lorem()", "TailFold"
+            self.FILE_FOO, 13, "fn lorem()", 14, "fn ipsum()", "TailFold"
         )
         self.assertIn("Added fold 'TailFold'", fold_result2)
 
-        # Unfold all using the tool
+        # Unfold all
         unfold_all_result = self.tool_call_unfold_all(self.FILE_FOO)
         self.assertIn("Removed all folds", unfold_all_result)
 
@@ -408,16 +394,16 @@ fn helper() {
         # Initially no folds
         self.assertFalse(handler.has_folds(self.FILE_FOO.name))
 
-        # Add a fold using the tool
+        # Add a fold
         fold_result = self.tool_call_add_fold(
-            self.FILE_FOO, "head", "struct FooBar(i32);", "MyFold"
+            self.FILE_FOO, 3, "struct Foo(i32);", 4, "struct FooBar(i32);", "MyFold"
         )
         self.assertIn("Added fold", fold_result)
 
         # Now has folds
         self.assertTrue(handler.has_folds(self.FILE_FOO.name))
 
-        # Unfold all using the tool
+        # Unfold all
         self.tool_call_unfold_all(self.FILE_FOO)
 
         # No more folds
@@ -466,15 +452,15 @@ line10
         self.tool_call_read_with_check(self.FILE_FOO, 0)
         read_msg_idx = len(messages) - 1
 
-        # Add a head fold ending at line 3 using the tool
+        # Add a fold from line 1 to line 3
         fold_result = self.tool_call_add_fold(
-            self.FILE_FOO, "head", "line3", "First three lines"
+            self.FILE_FOO, 1, "line1", 3, "line3", "First three lines"
         )
         self.assertIn("lines 1..3", fold_result)
 
-        # Add a tail fold starting at line 8 using the tool
+        # Add another fold from line 8 to line 10
         fold_result = self.tool_call_add_fold(
-            self.FILE_FOO, "tail", "line8", "Last three lines"
+            self.FILE_FOO, 8, "line8", 10, "line10", "Last three lines"
         )
         self.assertIn("lines 8..10", fold_result)
 
@@ -491,7 +477,7 @@ line10
         # Visible content
         for n in "4567":
             self.assertIn(f"line{n}", content)
-        # Hidden test_add_fold_no_space_between_foldsent should not be visible
+        # Hidden content should not be visible
         for n in ["1", "3", "8", "10"]:
             self.assertNotIn(f"line{n}", content)
 
@@ -509,11 +495,11 @@ line10
         folds = handler.get_folds(self.FILE_FOO.name)
         self.assertEqual(len(folds), 0)
 
-        # Add folds using the tool
+        # Add folds
         self.tool_call_add_fold(
-            self.FILE_FOO, "head", "struct FooBar(i32);", "HeadFold"
+            self.FILE_FOO, 3, "struct Foo(i32);", 4, "struct FooBar(i32);", "HeadFold"
         )
-        self.tool_call_add_fold(self.FILE_FOO, "tail", "fn lorem()", "TailFold")
+        self.tool_call_add_fold(self.FILE_FOO, 13, "fn lorem()", 14, "fn ipsum()", "TailFold")
 
         # Check folds
         folds = handler.get_folds(self.FILE_FOO.name)
@@ -532,17 +518,17 @@ line10
         self.tool_call_read_with_check(self.FILE_FOO, 0)
         read_msg_idx = len(messages) - 1
 
-        # Add a head fold to hide the imports and struct definitions
+        # Add a fold to hide struct definitions
         fold_result = self.tool_call_add_fold(
-            self.FILE_FOO, "head", "struct FooBar(i32);", "Helper functions structs"
+            self.FILE_FOO, 3, "struct Foo(i32);", 4, "struct FooBar(i32);", "Struct definitions",
         )
-        self.assertIn("Added fold 'Helper functions structs'", fold_result)
+        self.assertIn("Added fold 'Struct definitions'", fold_result)
 
-        # Add a tail fold to hide the helper functions
+        # Add a fold to hide helper functions
         fold_result = self.tool_call_add_fold(
-            self.FILE_FOO, "tail", "fn lorem()", "Lorem/ipsum implementation"
+            self.FILE_FOO, 13, "fn lorem()", 14, "fn ipsum()", "Helper functions"
         )
-        self.assertIn("Added fold 'Lorem/ipsum implementation'", fold_result)
+        self.assertIn("Added fold 'Helper functions'", fold_result)
 
         # Epilogue to apply folds
         self.epilogue()
@@ -572,17 +558,19 @@ line10
         # Read the file first
         self.tool_call_read_with_check(self.FILE_FOO, 0)
 
-        # Add a head fold to hide the imports and struct definitions
+        # Add a fold to hide struct definitions
         fold_result = self.tool_call_add_fold(
-            self.FILE_FOO, "head", "struct FooBar(i32);", "Helper functions structs"
+            self.FILE_FOO, 3, "struct Foo(i32);", 4, "struct FooBar(i32);", "Struct definitions",
         )
-        self.assertIn("Added fold 'Helper functions structs'", fold_result)
+        self.assertIn("Added fold 'Struct definitions'", fold_result)
 
         # Epilogue to apply folds
         self.epilogue()
 
         # Try to edit hidden content - should fail
-        edit_result = self.tool_call_edit_foo("struct FooBar(i32);", "struct FooBar2(i32);")
+        edit_result = self.tool_call_edit_foo(
+            "struct FooBar(i32);", "struct FooBar2(i32);"
+        )
 
         # This should fail because the target is hidden
         self.assertIsInstance(edit_result, dict)
@@ -591,7 +579,7 @@ line10
 
     def test_edit_file_with_folds_unique_in_visible(self):
         """Test editing a file with folds where target is unique in visible content."""
-        _, messages = self.init_test_llm()
+        self.init_test_llm()
         # Create a file with duplicate content
         test_content = """fn foo() -> i32 {
     return 1;
@@ -607,17 +595,16 @@ fn foobar() -> i32 {
 
         # Read the file first
         self.tool_call_read_with_check(self.FILE_FOO, 0)
-        read_msg_idx = len(messages) - 1
 
-        # Fold foo function (head fold to the closing brace on line 3)
+        # Fold foo function (from line 1 to line 3)
         fold_result1 = self.tool_call_add_fold(
-            self.FILE_FOO, "head", "}", "foo function"
+            self.FILE_FOO, 1, "fn foo()", 3, "}", "foo function"
         )
         self.assertIn("Added fold 'foo function'", fold_result1)
 
-        # Fold foobar function (tail fold from line 7 to end)
+        # Fold foobar function (from line 7 to line 9)
         fold_result2 = self.tool_call_add_fold(
-            self.FILE_FOO, "tail", "fn foobar()", "foobar function"
+            self.FILE_FOO, 7, "fn foobar()", 9, "}", "foobar function"
         )
         self.assertIn("Added fold 'foobar function'", fold_result2)
 
@@ -632,13 +619,35 @@ fn foobar() -> i32 {
 
         # Check the file was edited
         actual_content = self.FILE_FOO.read_text()
-        lines = actual_content.splitlines()
         # The bar function should have "return 2;"
         self.assertIn("    return 2;", actual_content)
 
+    def test_bol_required(self):
+        _, messages = self.init_test_llm()
+        test_content = """use bar::Bar;
+
+fn foo() -> i32{
+    if 1 <= 2 {
+        return 10;
+    }
+    return 20;
+}
+"""
+        self.FILE_FOO.write_text(test_content)
+
+        # Read the file first
+        self.tool_call_read_with_check(self.FILE_FOO, 0)
+        idx = len(messages) - 1
+        fold_result = self.tool_call_add_fold(
+            self.FILE_FOO, 3, "fn foo() -> i32{", 8, "}", "foo function"
+        )
+        self.assertIn("Added fold 'foo function'", fold_result)
+        self.epilogue()
+        self.assertIn(">>> FOLD: foo function (lines 3..8)", messages[idx]["content"])
+
     def test_edit_file_with_folds_not_unique_in_visible(self):
         """Test editing a file with folds where target is not unique in visible content."""
-        _, messages = self.init_test_llm()
+        self.init_test_llm()
         # Create a file with duplicate content in visible section
         test_content = """fn foo() -> i32 {
     return 1;
@@ -657,7 +666,7 @@ fn foobar() -> i32 {
 
         # Fold only foobar function
         fold_result = self.tool_call_add_fold(
-            self.FILE_FOO, "tail", "fn foobar()", "foobar function"
+            self.FILE_FOO, 7, "fn foobar()", 9, "}", "foobar function"
         )
         self.assertIn("Added fold 'foobar function'", fold_result)
 
@@ -695,7 +704,7 @@ line10
 
         # Add a tail fold
         fold_result = self.tool_call_add_fold(
-            self.FILE_FOO, "tail", "line8", "Bottom lines"
+            self.FILE_FOO, 8, "line8", 10, "line10", "Bottom lines"
         )
         self.assertIn("lines 8..10", fold_result)
 
@@ -746,7 +755,7 @@ line10
 
         # Add a tail fold
         fold_result = self.tool_call_add_fold(
-            self.FILE_FOO, "tail", "line8", "Bottom lines"
+            self.FILE_FOO, 8, "line8", 10, "line10", "Bottom lines"
         )
         self.assertIn("lines 8..10", fold_result)
 
@@ -776,7 +785,7 @@ line10
 
     def test_edit_file_no_folds_still_works(self):
         """Test that editing without folds still works as before."""
-        _, messages = self.init_test_llm()
+        self.init_test_llm()
         test_content = """fn foo() {
     return 1;
 }
@@ -797,7 +806,7 @@ line10
 
     def test_edit_file_no_folds_not_unique_fails(self):
         """Test that editing without folds still requires unique target."""
-        _, messages = self.init_test_llm()
+        self.init_test_llm()
         test_content = """fn foo() {
     return 1;
 }

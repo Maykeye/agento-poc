@@ -43,14 +43,34 @@ class ContextHandler(ABC):
     @abstractmethod
     def mode(self) -> ContextMode: ...
 
+    def update_fold_line_numbers(
+        self, path: str, old_line_count: int, new_line_count: int
+    ) -> None:
+        del (path, old_line_count, new_line_count)
+
+    def validate_edit_in_visible_content(
+        self, path: str, replace_from: str
+    ) -> tuple[bool, str]:
+        del (path, replace_from)
+        return (True, "")
+
     # Fold operations - base implementation that throws exceptions or returns dummy results
-    def add_fold(self, path: str, position: str, pattern: str, name: str) -> dict | str:
+    def add_fold(
+        self,
+        path: str,
+        fold_from_line_num: int,
+        fold_from_line: str,
+        fold_to_line_num: int,
+        fold_to_line: str,
+        name: str,
+    ) -> dict | str:
         """Add a fold to hide file content.
 
         Base implementation raises NotImplementedError.
         Only SuffixHandler supports folding.
         """
-        del (path, position, pattern, name)
+        del (path, fold_from_line_num, fold_from_line)
+        del (fold_to_line_num, fold_to_line, name)
         raise NotImplementedError(
             f"Fold operations not supported in {self.mode().value} context mode. "
             "Use SUFFIX context mode for folding support."

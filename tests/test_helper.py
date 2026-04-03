@@ -102,8 +102,10 @@ class TestBase(unittest.TestCase):
     def tool_call_add_fold(
         self,
         path: Path,
-        position: str,
-        pattern: str,
+        fold_from_line_num: int,
+        fold_from_line: str,
+        fold_to_line_num: int,
+        fold_to_line: str,
         name: str,
     ) -> Any:
         """Call the file_add_fold tool."""
@@ -116,15 +118,19 @@ class TestBase(unittest.TestCase):
                 arguments=json.dumps(
                     {
                         "path": path.name,
-                        "position": position,
-                        "pattern": pattern,
+                        "fold_from_line_num": fold_from_line_num,
+                        "fold_from_line": fold_from_line,
+                        "fold_to_line_num": fold_to_line_num,
+                        "fold_to_line": fold_to_line,
                         "name": name,
                     }
                 ),
                 id=f"id{self.ID}",
             ).llm_func_call_info()
         )
-        res = tool_io.ToolFoldAdd()(path.name, position, pattern, name)
+        res = tool_io.ToolFoldAdd()(
+            path.name, fold_from_line_num, fold_from_line, fold_to_line_num, fold_to_line, name
+        )
         return self.append_tool_call_result("file_add_fold", msgs, res)
 
     def tool_call_unfold(self, path, name: str):

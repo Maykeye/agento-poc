@@ -190,13 +190,23 @@ class SuffixHandler(ContextHandler):
         return None
 
     # Fold operations
-    def add_fold(self, path: str, position: str, pattern: str, name: str) -> dict | str:
+    def add_fold(
+        self,
+        path: str,
+        fold_from_line_num: int,
+        fold_from_line: str,
+        fold_to_line_num: int,
+        fold_to_line: str,
+        name: str,
+    ) -> dict | str:
         """Add a fold to hide file content.
 
         Args:
             path: File path
-            position: "head" (top) or "tail" (bottom)
-            pattern: Text pattern to match for folding
+            fold_from_line_num: Line number to start fold from (1-indexed)
+            fold_from_line: Textual representation of fold_from_line_num (for validation)
+            fold_to_line_num: Line number to end fold at (1-indexed)
+            fold_to_line: Textual representation of fold_to_line_num (for validation)
             name: Unique name for this fold
 
         Returns:
@@ -210,6 +220,36 @@ class SuffixHandler(ContextHandler):
         text = ctx.text
         lines = text.splitlines()
 
+        # Validate line numbers are within bounds
+        if fold_from_line_num < 1 or fold_from_line_num > len(lines):
+            return {
+                "error": f"fold_from_line_num {fold_from_line_num} out of range (1..{len(lines)})"
+            }
+        if fold_to_line_num < 1 or fold_to_line_num > len(lines):
+            return {
+                "error": f"fold_to_line_num {fold_to_line_num} out of range (1..{len(lines)})"
+            }
+
+        # Validate that fold_to_line_num is after fold_from_line_num
+        if fold_to_line_num < fold_from_line_num:
+            return {
+                "error": f"fold_to_line_num ({fold_to_line_num}) must be >= fold_from_line_num ({fold_from_line_num})"
+            }
+
+        # Validate that fold_from_line matches the actual line content
+        actual_from_line = lines[fold_from_line_num - 1]
+        if fold_from_line not in actual_from_line:
+            return {
+                "error": f"fold_from_line '{fold_from_line}' does not match actual line {fold_from_line_num}: '{actual_from_line}'"
+            }
+
+        # Validate that fold_to_line matches the actual line content
+        actual_to_line = lines[fold_to_line_num - 1]
+        if fold_to_line not in actual_to_line:
+            return {
+                "error": f"fold_to_line '{fold_to_line}' does not match actual line {fold_to_line_num}: '{actual_to_line}'"
+            }
+
         # Check for duplicate fold name in this file
         if path not in self._folds:
             self._folds[path] = []
@@ -218,30 +258,18 @@ class SuffixHandler(ContextHandler):
             if fold.name == name:
                 return {"error": f"Fold with name '{name}' already exists in {path}"}
 
-        # Find lines matching the pattern
-        match_indices = []
-        for i, line in enumerate(lines):
-            if pattern in line:
-                match_indices.append(i + 1)  # 1-indexed
-
-        if not match_indices:
-            return {"error": f"No lines matching pattern '{pattern}' found"}
-
-        # Determine fold range based on position
-        start_line, end_line = self._determine_fold_range(
-            path, position, match_indices, lines
+        # Check for overlap with existing folds
+        overlap_result = self._check_fold_overlap(
+            path, fold_from_line_num, fold_to_line_num
         )
-
-        if start_line is None:
-            return {"error": "Cannot add fold due to overlap or insufficient space"}
+        if overlap_result is not None:
+            return overlap_result
 
         # Create the fold
         fold = Fold(
             name=name,
-            position=position,
-            pattern=pattern,
-            start_line=start_line,
-            end_line=end_line,  # type: ignore
+            start_line=fold_from_line_num,
+            end_line=fold_to_line_num,
         )
         self._folds[path].append(fold)
 
@@ -251,9 +279,43 @@ class SuffixHandler(ContextHandler):
         new_id = f"CTX({ContextEntry.last_id})"
         return (
             f"{pfx} ID: {new_id} OPERATION: add_fold CTX-IO-FILE:  {path}\n"
-            f"{pfx} OK: Added fold '{name}' at lines {start_line}..{end_line}\n"
-            f"{pfx} === FOLD: {name} (lines {start_line}..{end_line}) ===\n"
+            f"{pfx} OK: Added fold '{name}' at lines {fold_from_line_num}..{fold_to_line_num}\n"
+            f"{pfx} === FOLD: {name} (lines {fold_from_line_num}..{fold_to_line_num}) ===\n"
         )
+
+    def _check_fold_overlap(
+        self, path: str, start_line: int, end_line: int
+    ) -> dict | None:
+        """Check if a new fold overlaps with existing folds.
+
+        Args:
+            path: File path
+            start_line: Proposed start line of new fold
+            end_line: Proposed end line of new fold
+
+        Returns:
+            Error dict if overlap detected, None if valid
+        """
+        existing_folds = self._folds.get(path, [])
+
+        for fold in existing_folds:
+            # Check for overlap: folds must have at least one line buffer between them
+            # New fold: [start_line, end_line]
+            # Existing fold: [fold.start_line, fold.end_line]
+            # Buffer required: at least one line between folds
+
+            # Check if new fold overlaps with existing fold
+            # Overlap occurs if:
+            # - New fold starts before existing fold ends + 1 (buffer)
+            # - New fold ends after existing fold starts - 1 (buffer)
+
+            # New fold would overlap if it touches or intersects existing fold
+            if not (end_line < fold.start_line - 1 or start_line > fold.end_line + 1):
+                return {
+                    "error": f"New fold (lines {start_line}..{end_line}) would overlap with existing fold '{fold.name}' (lines {fold.start_line}..{fold.end_line}). At least one line buffer required between folds."
+                }
+
+        return None
 
     def unfold(self, path: str, name: str) -> dict | str:
         """Remove a fold by name.
@@ -348,102 +410,6 @@ class SuffixHandler(ContextHandler):
             line_idx += 1
 
         return "\n".join(result_lines)
-
-    def _determine_fold_range(
-        self, path: str, position: str, match_indices: list[int], lines: list[str]
-    ) -> tuple[int | None, int | None]:
-        """Determine the start and end line numbers for a new fold.
-
-        Args:
-            path: File path
-            position: "head" or "tail"
-            match_indices: 1-indexed line numbers matching the pattern
-            lines: All lines in the file
-
-        Returns:
-            (start_line, end_line) tuple or (None, None) if fold cannot be added
-        """
-        existing_folds = self._folds.get(path, [])
-
-        # Determine search boundaries based on position
-        if position == "head":
-            # Search from top of file
-            search_start = 1
-            search_end = match_indices[0]  # First matching line
-        else:  # tail
-            # Search from bottom of file
-            search_start = match_indices[-1]  # Last matching line
-            search_end = len(lines)
-
-        if not existing_folds:
-            # No existing folds, can use the entire range
-            return (search_start, search_end)
-
-        # Check for overlaps with existing folds
-        # There must be at least one raw line between folds
-
-        if position == "head":
-            # Find the last head fold to determine minimum start
-            last_head_end = 0
-            for fold in existing_folds:
-                if fold.position == "head":
-                    last_head_end = max(last_head_end, fold.end_line)
-
-            # New head fold must start after the last head fold ends + 1 (for buffer line)
-            min_start = last_head_end + 2
-            if search_start < min_start:
-                # Adjust start to be after the last head fold
-                search_start = min_start
-
-            # Find the first tail fold to determine maximum end
-            first_tail_start = None
-            for fold in existing_folds:
-                if fold.position == "tail":
-                    if first_tail_start is None or fold.start_line < first_tail_start:
-                        first_tail_start = fold.start_line
-
-            if first_tail_start is not None:
-                # New head fold must end before the first tail fold starts - 1 (for buffer line)
-                max_end = first_tail_start - 2
-                if search_end > max_end:
-                    return (None, None)  # Overlap
-
-            # Check if there's enough space
-            if search_start > search_end:
-                return (None, None)  # No space
-
-            return (search_start, search_end)
-
-        else:  # position == "tail"
-            # Find the last head fold to determine minimum start
-            last_head_end = 0
-            for fold in existing_folds:
-                if fold.position == "head":
-                    last_head_end = max(last_head_end, fold.end_line)
-
-            # New tail fold must start after the last head fold ends + 1 (for buffer line)
-            min_start = last_head_end + 2
-            if search_start < min_start:
-                return (None, None)  # Overlap
-
-            # Find the first tail fold to determine maximum end
-            first_tail_start = None
-            for fold in existing_folds:
-                if fold.position == "tail":
-                    if first_tail_start is None or fold.start_line < first_tail_start:
-                        first_tail_start = fold.start_line
-
-            if first_tail_start is not None:
-                # New tail fold must end before the first tail fold starts - 1 (for buffer line)
-                max_end = first_tail_start - 2
-                if search_end > max_end:
-                    return (None, None)  # Overlap
-
-            # Check if there's enough space
-            if search_start > search_end:
-                return (None, None)  # No space
-
-            return (search_start, search_end)
 
     def get_visible_lines(self, path: str) -> list[int]:
         """Get all visible (non-folded) line numbers for a file.

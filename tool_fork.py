@@ -1,4 +1,3 @@
-from copy import Error
 from typing import Annotated
 from tool import Tool
 from llm import LLM

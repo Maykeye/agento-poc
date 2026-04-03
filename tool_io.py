@@ -232,20 +232,22 @@ class ToolEditFile(Tool):
 
         old_text = p.read_text()
         handler = context_handler()
-        
+
         # If file has folds, we need to check uniqueness in visible content only
         if handler.has_folds(path):
             # Validate that the edit target is visible and unique in visible content
-            is_valid, error_msg = handler.validate_edit_in_visible_content(path, replace_from)
+            is_valid, error_msg = handler.validate_edit_in_visible_content(
+                path, replace_from
+            )
             if not is_valid:
                 return {path: "error", "error": error_msg}
-            
+
             # Text exists exactly once in visible content - proceed with edit
             # First, check if text exists in the actual file (already validated above)
             idx1 = old_text.find(replace_from)
             if idx1 == -1:
                 return {path: "error", "error": f"Can not find `{repr(replace_from)}`"}
-            
+
             # Replace only the first occurrence (which is in visible content)
             new_text = old_text.replace(replace_from, replace_with, 1)
         else:
@@ -280,17 +282,21 @@ class ToolFoldAdd(Tool):
     def __init__(self):
         super().__init__(
             "file_add_fold",
-            "Add a fold to hide file content in the LLM context. Use 'head' for top of file or 'tail' for bottom.",
+            "Add a fold to hide file content in the LLM context. Specify line numbers to fold a range of lines. The line text arguments help validate correct line counting.",
         )
 
     def __call__(
         self,
         path: Annotated[str, "Project path to add fold to"],
-        position: Annotated[str, "'head' for top of file, 'tail' for bottom"],
-        pattern: Annotated[str, "Text pattern to match for folding"],
-        name: Annotated[str, "Unique name for this fold"],
+        fold_from_line_num: Annotated[int, "Line number to start fold from (1-indexed)"],
+        fold_from_line: Annotated[str, "Textual representation of line fold_from_line_num (for validation)"],
+        fold_to_line_num: Annotated[int, "Line number to end fold at (1-indexed)"],
+        fold_to_line: Annotated[str, "Textual representation of line fold_to_line_num (for validation)"],
+        name: Annotated[str, "Unique name/description for this fold"],
     ):
-        return context_handler().add_fold(path, position, pattern, name)
+        return context_handler().add_fold(
+            path, fold_from_line_num, fold_from_line, fold_to_line_num, fold_to_line, name
+        )
 
 
 class ToolUnfold(Tool):
