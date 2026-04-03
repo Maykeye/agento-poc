@@ -2,6 +2,7 @@
 from pathlib import Path
 from typing import Optional
 
+from context.context import context_handler
 from llm import LLM
 import tool_fork
 from utils import log_prompt, expand_file
@@ -21,12 +22,16 @@ class AgencyNode:
         assert self.lang in ["rust", "py", "js", "nul", "null", "rpg"]
 
     def _llm_initializers(self):
+        sys = []
         if self.lang == "rpg":
-            return [self._llm_rpg]
+            sys = [self._llm_rpg]
 
-        if self.readonly:
-            return [self._llm_reading]
-        return [self._llm_reading, self._llm_editing]
+        elif self.readonly:
+            sys = [self._llm_reading]
+        else:
+            sys = [self._llm_reading, self._llm_editing]
+        sys += [self._llm_fold]
+        return sys
 
     @property
     def llm(self) -> LLM:
@@ -58,6 +63,12 @@ class AgencyNode:
         llm.add_tool(tool_sh.ToolGitAdd())
         if self.lang == "rust":
             llm.add_tool(tool_sh.ToolCargoAdd())
+
+    def _llm_fold(self, llm: LLM):
+        if context_handler().mode() == ContextMode.SUFFIX:
+            llm.add_tool(tool_io.ToolFoldAdd())
+            llm.add_tool(tool_io.ToolUnfold())
+            llm.add_tool(tool_io.ToolUnfoldAll())
 
     def _llm_reading(self, llm: LLM):
         llm.add_tool(tool_io.ToolReadFile())
@@ -94,7 +105,7 @@ def main():
 
     # Example of preventing editing DESIGN.md
     # config.make_file_readonly("DESIGN.md")
-    # TODO: use it in prompt.md  as @readonly file?
+    # TODO: use it in prompt.md as @readonly file?
 
     # read prompt
     prompt = expand_file(filename)

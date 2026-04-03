@@ -288,14 +288,25 @@ class ToolFoldAdd(Tool):
     def __call__(
         self,
         path: Annotated[str, "Project path to add fold to"],
-        fold_from_line_num: Annotated[int, "Line number to start fold from (1-indexed)"],
-        fold_from_line: Annotated[str, "Textual representation of line fold_from_line_num (for validation)"],
+        fold_from_line_num: Annotated[
+            int, "Line number to start fold from (1-indexed)"
+        ],
+        fold_from_line: Annotated[
+            str, "Textual representation of line fold_from_line_num (for validation)"
+        ],
         fold_to_line_num: Annotated[int, "Line number to end fold at (1-indexed)"],
-        fold_to_line: Annotated[str, "Textual representation of line fold_to_line_num (for validation)"],
+        fold_to_line: Annotated[
+            str, "Textual representation of line fold_to_line_num (for validation)"
+        ],
         name: Annotated[str, "Unique name/description for this fold"],
     ):
         return context_handler().add_fold(
-            path, fold_from_line_num, fold_from_line, fold_to_line_num, fold_to_line, name
+            path,
+            fold_from_line_num,
+            fold_from_line,
+            fold_to_line_num,
+            fold_to_line,
+            name,
         )
 
 
