@@ -1,4 +1,4 @@
-from typing import Callable, Literal
+from typing import Callable, Literal, Optional
 import inspect
 import typing
 from typing import Annotated
@@ -29,6 +29,9 @@ class Tool:
                 "parameters": self.parameters,
             },
         }
+
+    def init_system_msg(self) -> Optional[str]:
+        return None
 
 
 def parse_tool_parms(tool_fn: Callable):

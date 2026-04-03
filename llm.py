@@ -63,6 +63,8 @@ class LLM:
     INSTANCES: list[LlmInstace] = []
     """ Keeps stack of LLM instances that are currently being run  """
 
+    DEFAULT_SYSTEM = "You are a helpful ai assistant"
+
     def __init__(self) -> None:
         self.url = f"http://localhost:{os.environ.get('LLAMA_CPP_PORT', 10000)}/v1/chat/completions"
         self.tools: dict[str, Tool] = {}
@@ -81,8 +83,24 @@ class LLM:
         assert tool.name not in self.tools
         self.tools[tool.name] = tool
 
+    def prepend_system_message(self, msgs: list[dict]):
+        extra = []
+        if msgs[0]["role"] == "system":
+            sys = msgs[0]["content"]
+        else:
+            sys = LLM.DEFAULT_SYSTEM
+        for tool in self.tools.values():
+            if info := tool.init_system_msg():
+                extra.append(info)
+        appendum = ("\n\n" + "\n\n".join(extra)) if extra else ""
+
+        msgs.insert(0, self.msg_system(sys + appendum))
+        return msgs
+
     # TODO: split class to test/mock it easier
     def generate(self, messages: list[dict]) -> Response:
+        if messages[0]["role"] != "system":
+            raise ValueError("Call messages = llm.prepend_system_message(messages)")
         try:
             self.INSTANCES.append(LlmInstace(self, messages))
             return self._generate(messages)
