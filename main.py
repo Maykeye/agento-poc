@@ -114,7 +114,9 @@ def main():
     log_prompt(str(config.project_directory()), prompt)
 
     # run
-    node = AgencyNode(lang=config.guess_project_language())
+    lang = config.guess_project_language()
+    print(f"{lang=}")
+    node = AgencyNode(lang=lang)
     node.simple(prompt)
     if node.lang == "rust":
         tool_sh.rustfmt()

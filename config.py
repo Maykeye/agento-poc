@@ -18,7 +18,7 @@ def project_directory():
 
 def guess_project_language():
     files = list(project_directory().glob("*"))
-    if "Cargo.toml" in files:
+    if any(file.name == "Cargo.toml" for file in files):
         return "rust"
     if any(file.name.endswith(".py") for file in files):
         return "py"
