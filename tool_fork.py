@@ -31,10 +31,7 @@ class ToolFork(Tool):
 A tool to fork task into separate context.
 Purpose of this tool is to save context size. It must be used this way:
 Let say you need to implement or edit foo(), bar(), then check the result. 
-To do so call the tool with three instructions
-1) call fork tool with instruction to implement foo()
-2) call fork tool with instruction to implement bar()
-3) call fork tool with the instruction to check the result.
+To do so call the tool with instructions ["implement foo", "implement bar"]
 
 After fork ends the tasks, it will report success or failure of each of its task so you can proceed without seeing the actions performed by fork.
 
