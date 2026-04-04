@@ -36,17 +36,25 @@ class Tool:
 
 def parse_tool_parms(tool_fn: Callable):
     def _parse_type(raw_type) -> dict:
-        if typing.get_origin(raw_type) == Literal:
+        origin = typing.get_origin(raw_type)
+        if origin == Literal:
             values = typing.get_args(raw_type)
             res = _parse_type(type(values[0]))
             res["enum"] = list(values)
             return res
 
+        if origin is list or raw_type is list:
+            items_type = {"type": "string"}  # Default inner type
+            args = typing.get_args(raw_type)
+            if args:
+                items_type = _parse_type(args[0])
+            return {"type": "array", "items": items_type}
+
         known = {
             int: "integer",
             float: "number",
             bool: "boolean",
-            list: "array",  # TODO: list[str]?
+            list: "array",
             str: "string",
         }
         if name := known.get(raw_type):
@@ -69,6 +77,7 @@ def parse_tool_parms(tool_fn: Callable):
         argument["description"] = type_info[1]
         args[parm.name] = argument
         required.append(parm.name)
+    # print(tool_fn, args)
 
     return {
         "type": "object",
