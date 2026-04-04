@@ -141,11 +141,12 @@ def empty_stdin():
 def run_executable(args: list[str]):
     env = None
     if not os.getenv("NODE_PATH"):
-        env = {"NODE_PATH": "/usr/lib/node_modules/"}
+        env = os.environ.copy()
+        env["NODE_PATH"] = "/usr/lib/node_modules/"
     try:
         # TODO: tee me
-        print(">>> RUN:", args)
         with empty_stdin() as stdin:
+            print(args)
             p = subprocess.run(
                 args, capture_output=True, text=True, stdin=stdin, env=env
             )
