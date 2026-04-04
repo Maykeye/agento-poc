@@ -1,7 +1,7 @@
 from typing import Annotated
 from tool import Tool
 from llm import LLM
-from utils import extract_tag
+import json
 import copy
 
 
@@ -48,6 +48,8 @@ Note. If you are a subagent, don't fork your task.
         self, instructions: Annotated[list, "Array of instructions for the forked llm."]
     ):
         assert LLM.INSTANCES, "Must see indexes"
+        if isinstance(instructions, str):
+            instructions = json.loads(instructions)
 
         # Get the current LLM and messages
         llm = LLM.INSTANCES[-1].llm.clone()
@@ -91,7 +93,7 @@ Think step-by-step, then conclude your work by providing the result wrapped EXAC
                 }
             )
 
-            print(">>>>>>> FORK START: Started generating")
+            print(f">>>>>>> FORK START: Started generating: `{instruction[:40]}`")
             res = llm.generate(fork_messages)
 
             # Extract the report reliably
