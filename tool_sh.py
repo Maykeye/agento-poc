@@ -156,4 +156,4 @@ class ToolPupeeter(Tool):
 def rustfmt():
     """Run rust fmt"""
     p = shlex.quote(str(config.project_directory()))
-    subprocess.run(["bash", "-c", f"cd {p}; rustfmt **/*.rs"])
+    subprocess.run(["bash", "-c", f"cd {p}; rustfmt --edition 2024 **/*.rs"])
