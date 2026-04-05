@@ -26,6 +26,8 @@ def expand_file(prompt_file: str, used_files: Optional[set[str]] = None):
             new += [out]
         elif project := cmd(line, "@project_dir "):
             config.set_project_directory(Path(project).resolve())
+        elif line.startswith("@#"):  # commentary
+            continue
         elif line.startswith("@"):
             raise ValueError(f"Unknown command {line}")
         else:
