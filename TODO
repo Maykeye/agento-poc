@@ -1,7 +1,1 @@
-* Cargo check should include cargo clippy
-
-
-* Making directory invisible
-
-Both for ls and api helper.
-Also provide info like "ls and api helper will not list some directories that you shouldn't focus on."
+Patch tool should ask model unified format

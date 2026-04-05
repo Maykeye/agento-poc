@@ -18,7 +18,7 @@ class TestSuffix(TestContextBase):
         found = False
         all_expected = [
             f"ID: CTX({from_ctx_id})",
-            f"CURRENT CONTENT IN CTX({to_ctx_id})",
+            "CONTENT IS OUT OF DATE",
         ]
         for msg in msgs:
             if msg.get("role") != "tool":
@@ -219,7 +219,7 @@ class TestSuffix(TestContextBase):
             content = str(msg.get("content", ""))
             if "ID: CTX(0)" in content and "\n>>> === CONTENT START ===" in content:
                 # CTX(0) should reference CTX(1), not contain full "foo\ntext" content
-                self.assertIn("CURRENT CONTENT IN CTX(1)", content)
+                self.assertIn("CONTENT IS OUT OF DATE", content)
                 self.assertNotIn("foo", content)
                 self.assertNotIn("text", content)
 

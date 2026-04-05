@@ -168,9 +168,7 @@ class SuffixHandler(ContextHandler):
 
                     # Add the header and new reference
                     result_lines.append(header)
-                    result_lines.append(
-                        f"{pfx} === CURRENT CONTENT IN {current_id} ==="
-                    )
+                    result_lines.append(f"{pfx} === CONTENT IS OUT OF DATE ===")
                     # Insert the folded (or original) content
                     if folded_content:
                         result_lines.append(folded_content)
