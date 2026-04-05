@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Annotated
 import os
 from config import real_path, READ_ONLY_FILES, READ_ONLE_ERROR
-from tool import Tool
+from tool import Tool, run_executable
 import re
 from context import ContextMode, context_handler
 
@@ -340,3 +340,88 @@ class ToolUnfoldAll(Tool):
 
         result = handler.unfold_all(path)
         return result
+
+
+class ToolEditDiffPatch(Tool):
+    def __init__(self):
+        super().__init__(
+            "edit_diff_patch",
+            "Edit the file using a patch/diff format. Your output must be in `patch`/`diff` format. Prefer this function over edit_file. Only single file is allowed",
+        )
+
+    def __call__(
+        self,
+        path: Annotated[str, "Project path to edit"],
+        patch: Annotated[str, "Patch content in unified diff format"],
+    ):
+        p = real_path(path)
+
+        if p in READ_ONLY_FILES:
+            return {path: "error", "error": READ_ONLE_ERROR}
+
+        if p.exists() and not p.is_file():
+            return {path: "error", "error": f"File exists, but it is not a file"}
+
+        # Validate patch format
+        lines = patch.splitlines()
+        if len(lines) < 2:
+            return {path: "error", "error": "Patch must have at least two lines"}
+
+        # Check first line starts with "--- a/"
+        if not lines[0].startswith("--- a/"):
+            return {
+                path: "error",
+                "error": f"First line must start with '--- a/', got: {lines[0]}",
+            }
+
+        # Check second line starts with "+++ b/"
+        if not lines[1].startswith("+++ b/"):
+            return {
+                path: "error",
+                "error": f"Second line must start with '+++ b/', got: {lines[1]}",
+            }
+
+        # Extract the path from the patch and verify it matches the requested path
+        patch_path_a = lines[0][5:]  # Remove "--- a/" prefix
+
+        # Normalize paths for comparison - handle relative paths properly
+        # If patch path starts with /, strip it; if not, prepend project dir
+        patch_path_normalized = real_path(patch_path_a.removeprefix("/")).as_posix()
+        requested_path_normalized = p.as_posix()
+
+        if patch_path_normalized != requested_path_normalized:
+            return {
+                path: "error",
+                "error": f"Patch path '{patch_path_a}' does not match requested path '{path}'",
+            }
+
+        # Check that there are no other file markers (multiple files in patch)
+        for line in lines[2:]:
+            if line.startswith("--- ") or line.startswith("+++ "):
+                return {
+                    path: "error",
+                    "error": f"Patch contains multiple files. Only single file patches are allowed.",
+                }
+
+        # Run patch directly on the file (don't use -p, just pass the file)
+        result = run_executable(["patch", str(p)], stdin_text=patch)
+
+        if result.get("exitcode") != 0:
+            return {
+                path: "error",
+                "error": f"Patch failed with exit code {result.get('exitcode')}",
+                "stdout": result.get("stdout", ""),
+                "stderr": result.get("stderr", ""),
+            }
+
+        # Read the modified file content and update context
+        new_text = p.read_text()
+        handler = context_handler()
+
+        # Update fold line numbers if the edit changed the line count
+        old_line_count = len(patch.splitlines())  # This is just for context
+        new_line_count = len(new_text.splitlines())
+        if handler.has_folds(path):
+            handler.update_fold_line_numbers(path, old_line_count, new_line_count)
+
+        return handler.update(path, new_text, "edit_diff_patch")

@@ -20,6 +20,10 @@ class PrefixHandler(ContextHandler):
         if path in CONTEXTS:
             del CONTEXTS[path]
         CONTEXTS[path] = ContextEntry(path, text, id, oper)
+
+        if oper == "edit_diff_patch":
+            return f">>> OK: {oper} {path}\n>>> PATCH APPLIED (id: {id})"
+
         return {"context-change": {"path": path, "operation": oper, "id": id}}
 
     def prepare_current_llm(self, llm: LlmProto):

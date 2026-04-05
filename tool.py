@@ -147,18 +147,23 @@ def empty_stdin():
     return open("/dev/null")
 
 
-def run_executable(args: list[str]):
+def run_executable(args: list[str], stdin_text: Optional[str] = None):
     env = None
     if not os.getenv("NODE_PATH"):
         env = os.environ.copy()
         env["NODE_PATH"] = "/usr/lib/node_modules/"
     try:
         # TODO: tee me
-        with empty_stdin() as stdin:
-            print(args)
+        if stdin_text is not None:
             p = subprocess.run(
-                args, capture_output=True, text=True, stdin=stdin, env=env
+                args, capture_output=True, text=True, input=stdin_text, env=env
             )
+        else:
+            with empty_stdin() as stdin:
+                print(args)
+                p = subprocess.run(
+                    args, capture_output=True, text=True, stdin=stdin, env=env
+                )
         return {"exitcode": p.returncode, "stdout": p.stdout, "stderr": p.stderr}
     except Exception as ex:
         print(ex)

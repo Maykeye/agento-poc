@@ -54,6 +54,8 @@ class SuffixHandler(ContextHandler):
             assert edit_chunk
             replace_from, replace_with = edit_chunk
             return f"{pfx} ID: {new_id} OPERATION: {oper} CTX-IO-FILE:  {path}\n{pfx} OK: edit {path} (replaced `{repr(replace_from)}` with `{repr(replace_with)}`)\n{pfx} === CONTENT START ===\n{text}\n{pfx} === CONTENT END ==="
+        elif oper == "edit_diff_patch":
+            return f"{pfx} ID: {new_id} OPERATION: {oper} CTX-IO-FILE:  {path}\n{pfx} OK: {oper} {path}\n{pfx} PATCH APPLIED\n{pfx} === CONTENT START ===\n{text}\n{pfx} === CONTENT END ==="
 
         raise ValueError("Unknown oper")
 
