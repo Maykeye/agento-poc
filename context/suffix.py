@@ -57,7 +57,7 @@ class SuffixHandler(ContextHandler):
         elif oper == "edit_diff_patch":
             return f"{pfx} ID: {new_id} OPERATION: {oper} CTX-IO-FILE:  {path}\n{pfx} OK: {oper} {path}\n{pfx} PATCH APPLIED\n{pfx} === CONTENT START ===\n{text}\n{pfx} === CONTENT END ==="
 
-        raise ValueError("Unknown oper")
+        raise ValueError(f"Unknown oper {oper}")
 
     def prepare_current_llm(self, llm: LlmProto):
         """Update all messages that reference old file content to point to new content."""
