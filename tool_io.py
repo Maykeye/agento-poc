@@ -345,8 +345,8 @@ class ToolUnfoldAll(Tool):
 class ToolEditDiffPatch(Tool):
     def __init__(self):
         super().__init__(
-            "edit_diff_patch",
-            "Edit the file using a patch/diff format. Your output must be in `patch`/`diff` format. Prefer this function over edit_file. Only single file is allowed",
+            "edit_file_by_patch",
+            "Edit the file using a unified patch format. Your output must be in `patch`/`diff` format. Prefer this function over edit_file. Only single file is allowed",
         )
 
     def __call__(
@@ -404,7 +404,7 @@ class ToolEditDiffPatch(Tool):
                 }
 
         # Run patch directly on the file (don't use -p, just pass the file)
-        result = run_executable(["patch", str(p)], stdin_text=patch)
+        result = run_executable(["patch", "-u", str(p)], stdin_text=patch)
 
         if result.get("exitcode") != 0:
             return {
