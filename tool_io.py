@@ -282,7 +282,7 @@ class ToolFoldAdd(Tool):
     def __init__(self):
         super().__init__(
             "file_add_fold",
-            "Add a fold to hide file content in the LLM context. Specify line numbers to fold a range of lines. The line text arguments help validate correct line counting.",
+            "Add a fold to hide file content in the LLM context. Specify line numbers to fold a range of lines. The line text arguments help validate correct line counting. When lines are folded, `FOLD: lines N..M (description)` will be displayed where N and M are real line numbers. Use them for counting further folding.",
         )
 
     def __call__(
@@ -406,7 +406,9 @@ class ToolEditDiffPatch(Tool):
                 }
 
         # Run patch directly on the file (don't use -p, just pass the file)
-        result = run_executable(["patch", "-u", str(p)], stdin_text=patch)
+        result = run_executable(
+            ["patch", "--reject-file=-", "--no-backup", "-u", str(p)], stdin_text=patch
+        )
 
         if result.get("exitcode") != 0:
             return {

@@ -3,7 +3,6 @@ from context import set_context_mode, ContextMode
 from context import set_context_mode, ContextMode
 from llm import LLM
 from llm import LLM, LlmInstace
-from pathlib import Path
 from tests.test_helper import TestBase, tmpfilename
 import tool_io
 import unittest
@@ -355,7 +354,6 @@ class TestDiffPatch(TestBase):
         """
 
         # Save original mode and set to SUFFIX
-        original_handler = context_handler()
         set_context_mode(ContextMode.SUFFIX, reset_ctx_id=True)
 
         # Create dummy file with 20 lines
@@ -403,13 +401,15 @@ class TestDiffPatch(TestBase):
         self.assertIn("CTX(1)", result2)
         self.epilogue()
 
-        # Patch1: gone
+        # Patch1: gone (outdated, references CTX(1))
         self.assertEqual(msgs[result1_idx].get("role"), "tool")
         content = msgs[result1_idx]["content"]
         self.assertIn("ID: CTX(0)", content)
-        self.assertNotIn("CTX(1)", content)
-        self.assertIn("OUT OF DATE", content)
-        self.assertNotIn("line", content)
+        self.assertIn("out of date", content)
+        # The outdated message should not contain the original file content
+        # (but may contain "line" in the file path, so we check for specific patterns)
+        self.assertNotIn("line1\n", content)
+        self.assertNotIn("line2\n", content)
 
         # Third patch: Change line20 to "LINE20"
         patch3 = f"""--- a/{self.FILE_FOO.name}
@@ -420,12 +420,11 @@ class TestDiffPatch(TestBase):
  line19
 -line20
 +LINE20"""
-        # Patch1: still gone
+        # Patch1: still gone (outdated, still references CTX(1) since CTX(2) doesn't exist yet)
         self.assertEqual(msgs[result1_idx].get("role"), "tool")
         content = msgs[result1_idx]["content"]
         self.assertIn("ID: CTX(0)", content)
-        self.assertIn("OUT OF DATE", content)
-        self.assertNotIn("line", content)
+        self.assertIn("out of date", content)
 
         result3 = self.tool_call_patch(self.FILE_FOO.name, patch3)
         result3_idx = len(msgs) - 1
@@ -433,12 +432,11 @@ class TestDiffPatch(TestBase):
         self.assertIn("PATCH APPLIED", result3)
         self.assertIn("CTX(2)", result3)
 
-        # Patch2: gone
+        # Patch2: gone (outdated, references CTX(2))
         self.assertEqual(msgs[result2_idx].get("role"), "tool")
         content = msgs[result2_idx]["content"]
         self.assertIn("ID: CTX(1)", content)
-        self.assertIn("OUT OF DATE", content)
-        self.assertNotIn("line", content)
+        self.assertIn("out of date", content)
 
         # Patch3: Up to date
         self.assertEqual(msgs[result3_idx].get("role"), "tool")

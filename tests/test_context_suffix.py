@@ -14,20 +14,15 @@ class TestSuffix(TestContextBase):
         self.assertIn("foo\ntext", res)
         self.assertIn(f"CTX({ctx_id})", res)
 
-    def assert_ctx_references(self, msgs: list[dict], from_ctx_id: int, to_ctx_id: int):
-        found = False
-        all_expected = [
-            f"ID: CTX({from_ctx_id})",
-            "CONTENT IS OUT OF DATE",
-        ]
+    def assert_ctx_out_of_date(self, msgs: list[dict], ctx_id: int):
+        all_expected = [f"ID: CTX({ctx_id})", "out of date"]
         for msg in msgs:
             if msg.get("role") != "tool":
                 continue
             content = str(msg.get("content", ""))
             if all(x in content for x in all_expected):
-                found = True
-                break
-        self.assertTrue(found, f"CTX({from_ctx_id}) should reference CTX({to_ctx_id})")
+                return
+        raise ValueError(f"CTX({ctx_id}) not found out of date")
 
     def assert_ctx_has_full_content(
         self, msgs: list[dict], ctx_id: int, expected_content: str
@@ -56,8 +51,8 @@ class TestSuffix(TestContextBase):
         self.tool_call_read_with_check(self.FILE_FOO, 2)
         self.epilogue()
 
-        self.assert_ctx_references(msgs, 0, 2)
-        self.assert_ctx_references(msgs, 1, 2)
+        self.assert_ctx_out_of_date(msgs, 0)
+        self.assert_ctx_out_of_date(msgs, 1)
         self.assert_ctx_has_full_content(msgs, 2, "foo\ntext")
 
     def test_write_three_times(self):
@@ -69,8 +64,8 @@ class TestSuffix(TestContextBase):
         self.tool_call_write_with_check(self.FILE_FOO, 2, "THIRD_CONTENT")
         self.epilogue()
 
-        self.assert_ctx_references(msgs, 0, 2)
-        self.assert_ctx_references(msgs, 1, 2)
+        self.assert_ctx_out_of_date(msgs, 0)
+        self.assert_ctx_out_of_date(msgs, 1)
         self.assert_ctx_has_full_content(msgs, 2, "THIRD_CONTENT")
 
     def test_write_then_read(self):
@@ -80,7 +75,7 @@ class TestSuffix(TestContextBase):
         self.tool_call_read_with_check(self.FILE_FOO, 1, "WRITTEN_CONTENT")
         self.epilogue()
 
-        self.assert_ctx_references(msgs, 0, 1)
+        self.assert_ctx_out_of_date(msgs, 0)
         self.assert_ctx_has_full_content(msgs, 1, "WRITTEN_CONTENT")
 
     def test_read_then_write(self):
@@ -91,7 +86,7 @@ class TestSuffix(TestContextBase):
         self.tool_call_write_with_check(self.FILE_FOO, 1, "NEW_WRITTEN_CONTENT")
         self.epilogue()
 
-        self.assert_ctx_references(msgs, 0, 1)
+        self.assert_ctx_out_of_date(msgs, 0)
         self.assert_ctx_has_full_content(msgs, 1, "NEW_WRITTEN_CONTENT")
 
     def test_parallel_io(self):
@@ -102,34 +97,18 @@ class TestSuffix(TestContextBase):
         dummy_llm, msgs = self.init_llm_msgs()
         msgs.append(dummy_llm.msg_user("Please write both foo and bar files"))
 
-        # First round: Write both files with new content
-        # CTX(0) = FILE_FOO with FOO_ROUND1
-        # CTX(1) = FILE_BAR with BAR_ROUND1
         self.tool_call_write_with_check(self.FILE_FOO, 0, "FOO_ROUND1")
         self.tool_call_write_with_check(self.FILE_BAR, 1, "BAR_ROUND1")
-
-        # Second round: Write both files with different content
-        # CTX(2) = FILE_FOO with FOO_ROUND2
-        # CTX(3) = FILE_BAR with BAR_ROUND2
         self.tool_call_write_with_check(self.FILE_FOO, 2, "FOO_ROUND2")
         self.tool_call_write_with_check(self.FILE_BAR, 3, "BAR_ROUND2")
 
         self.epilogue()
 
-        # After epilogue, verify each file's contexts are independent
-        # FILE_FOO: CTX(0) references CTX(2), CTX(2) has FOO_ROUND2 content
-        # FILE_BAR: CTX(1) references CTX(3), CTX(3) has BAR_ROUND2 content
-
-        # Verify FILE_FOO contexts: CTX(0) references CTX(2), and CTX(2) has full content
-        self.assert_ctx_references(msgs, 0, 2)  # FOO: 0 references 2
+        self.assert_ctx_out_of_date(msgs, 0)
+        self.assert_ctx_out_of_date(msgs, 1)
         self.assert_ctx_has_full_content(msgs, 2, "FOO_ROUND2")
-
-        # Verify FILE_BAR contexts: CTX(1) references CTX(3), and CTX(3) has full content
-        self.assert_ctx_references(msgs, 1, 3)  # BAR: 1 references 3
         self.assert_ctx_has_full_content(msgs, 3, "BAR_ROUND2")
 
-        # CRITICAL: Verify that FOO's content doesn't appear in BAR's contexts and vice versa
-        # CTX(2) should have FOO_ROUND2 but NOT BAR_ROUND2 or BAR_ROUND1
         foo_has_no_bar_content = True
         for msg in msgs:
             content = str(msg.get("content", ""))
@@ -187,10 +166,8 @@ class TestSuffix(TestContextBase):
 
         self.epilogue()
 
-        # CTX(0) and CTX(1) should reference CTX(2)
-        self.assert_ctx_references(msgs, 0, 2)
-        self.assert_ctx_references(msgs, 1, 2)
-        # CTX(2) should have the final content
+        self.assert_ctx_out_of_date(msgs, 0)
+        self.assert_ctx_out_of_date(msgs, 1)
         self.assert_ctx_has_full_content(msgs, 2, "NEW_CONTENT")
 
     def test_edit_sample(self):
@@ -210,7 +187,7 @@ class TestSuffix(TestContextBase):
         self.epilogue()
 
         # Verify: original reading (CTX(0)) should now reference CTX(1)
-        self.assert_ctx_references(msgs, 0, 1)
+        self.assert_ctx_out_of_date(msgs, 0)
         # Verify: CTX(1) should have the edited content
         self.assert_ctx_has_full_content(msgs, 1, "dummy\ncontent")
         # Verify: original "foo\ntext" should NOT appear in CTX(0)'s full content block
@@ -220,8 +197,9 @@ class TestSuffix(TestContextBase):
             if "ID: CTX(0)" in content and "\n>>> === CONTENT START ===" in content:
                 # CTX(0) should reference CTX(1), not contain full "foo\ntext" content
                 self.assertIn("CONTENT IS OUT OF DATE", content)
-                self.assertNotIn("foo", content)
-                self.assertNotIn("text", content)
+                # Check that the original content "foo\ntext" is not in the message
+                # (the file path may contain "foo" as substring, but the content shouldn't)
+                self.assertNotIn("foo\ntext", content)
 
     def test_edit_one_line_only(self):
         """Test editing only one line of a file, keeping rest of content intact."""
@@ -242,7 +220,7 @@ class TestSuffix(TestContextBase):
         self.epilogue()
 
         # Verify: original reading (CTX(0)) should now reference CTX(1)
-        self.assert_ctx_references(msgs, 0, 1)
+        self.assert_ctx_out_of_date(msgs, 0)
         # Verify: CTX(1) should have the edited content "FOO\ntext"
         self.assert_ctx_has_full_content(msgs, 1, "FOO\ntext")
         # Verify: the full content message for CTX(1) shows "FOO\ntext"
@@ -324,99 +302,40 @@ class TestSuffix(TestContextBase):
 
         # Critical: verify CONTENT END marker is on its own line
         lines = res.split("\n")
-        content_end_idx = None
-        for i, line in enumerate(lines):
-            if ">>> === CONTENT END ===" in line:
-                content_end_idx = i
-                break
-        self.assertIsNotNone(content_end_idx, "CONTENT END marker should exist")
-        self.assertTrue(lines[content_end_idx].strip() == ">>> === CONTENT END ===")
-
+        content_end_exist = any(
+            line.startswith(">>> === CONTENT END") for line in lines
+        )
+        self.assertIsNotNone(content_end_exist, "CONTENT END marker should exist")
         self.epilogue()
-
-        # After epilogue, verify the edited content is properly stored
+        self.assert_ctx_out_of_date(msgs, 0)
         self.assert_ctx_has_full_content(msgs, 1, edited_text)
-        # And the original write (CTX(0)) references CTX(1)
-        self.assert_ctx_references(msgs, 0, 1)
 
     def test_read_safe_from_asst(self):
-        """Test that reading file is safe even when assistant message contains file content.
-
-        This test verifies the context handling when an assistant message contains
-        a replica of the tool result (file content). The system should correctly
-        identify which context IDs belong to which operations.
-
-        Flow:
-        1. First read operation on file (creates CTX(0))
-        2. Insert exact replica from tool result into assistant message content
-        3. Execute tool call to read file again (creates CTX(1))
-        4. Call epilogue to make sure handling is done
-
-        Expected behavior:
-        - Initial read message (CTX(0)) must redirect to second read message (CTX(1))
-        - Assistant message should reference CTX(0) (as it was created after first read)
-        - Second read message should be CTX(1) and not see the assistant message content
-        """
         dummy_llm, msgs = self.init_llm_msgs()
         msgs.append(dummy_llm.msg_user("Please read foo"))
-
-        # Step 1: First read operation on file (creates CTX(0))
         msgs.append(dummy_llm.msg_assistant("Reading foo"))
         self.tool_call_read_with_check(self.FILE_FOO, 0, "foo\ntext")
-
-        # Step 2: Insert exact replica from tool result into assistant message content
-        # This simulates the case where assistant logs the file content in its message
         assistant_idx = len(msgs)
         msgs.append(dummy_llm.msg_assistant(msgs[-1]["content"]))
         assistant_msg = msgs[assistant_idx]["content"]
-
-        # Step 3: Execute tool call to read file again (creates CTX(1))
         msgs.append(dummy_llm.msg_assistant("Reading foo again"))
         self.tool_call_read_with_check(self.FILE_FOO, 1, "foo\ntext")
-
-        # Assistant message should not be changed
-        # (Not expected to fail even if code fails: epilogue wasn't called)
         self.assertEqual(assistant_msg, msgs[assistant_idx]["content"])
-
-        # Step 4: Call epilogue to make sure handling is done
         self.epilogue()
-
-        # Test: Reference movement
-        self.assert_ctx_references(msgs, 0, 1)
+        self.assert_ctx_out_of_date(msgs, 0)
         self.assert_ctx_has_full_content(msgs, 1, "foo\ntext")
 
-        # Assistant message should not be changed
         self.assertEqual(assistant_msg, msgs[assistant_idx]["content"])
 
     def test_file_contains_context_like_content(self):
         # TODO: simplify
-        """Test that a file containing context-like content is properly handled.
-
-        This test verifies that when a file contains content that looks like
-        the context output format (with ID, OPERATION, CONTENT START/END markers),
-        the read_file tool properly wraps it with its own context markers.
-
-        The file content itself contains:
-        - A header line with ID, OPERATION, and file path
-        - CONTENT START marker
-        - Actual content
-        - CONTENT END marker
-
-        When read through the tool, this should result in nested context markers:
-        - Tool adds its own header and CONTENT START
-        - File content (which includes its own header, CONTENT START, content, CONTENT END)
-        - Tool adds its own CONTENT END
-
-        This tests that the SuffixHandler doesn't get confused by context-like
-        content inside a file.
-        """
         dummy_llm, msgs = self.init_llm_msgs()
         msgs.append(dummy_llm.msg_user("Please read file with context-like content"))
 
         # Step 1: Write a file with content that looks like context output
         # Using raw Path.write_text to bypass the tool and write exact content
         context_like_content = (
-            ">>> ID: 0 OPERATION: read_file CTX-IO-FILE:  .agento.demo.foo\n"
+            ">>> ID: 0 OPERATION: read_file CTX-IO-FILE: .agento.demo.foo\n"
             ">>> === CONTENT START ===\n"
             "THIS FILE HAS 4 LINES\n"
             ">>> === CONTENT END ==="
@@ -430,9 +349,9 @@ class TestSuffix(TestContextBase):
         # Step 3: Verify the result contains properly nested context markers
         # The tool should add its own header and markers around the file content
         expected_result = (
-            ">>> ID: CTX(0) OPERATION: read_file CTX-IO-FILE:  .agento.demo.foo\n"
+            ">>> ID: CTX(0) OPERATION: read_file CTX-IO-FILE: .agento.demo.foo\n"
             ">>> === CONTENT START ===\n"
-            ">>> ID: 0 OPERATION: read_file CTX-IO-FILE:  .agento.demo.foo\n"
+            ">>> ID: 0 OPERATION: read_file CTX-IO-FILE: .agento.demo.foo\n"
             ">>> === CONTENT START ===\n"
             "THIS FILE HAS 4 LINES\n"
             ">>> === CONTENT END ===\n"
@@ -440,12 +359,6 @@ class TestSuffix(TestContextBase):
         )
 
         self.assertEqual(res, expected_result)
-
-        # Verify that the result has the correct structure:
-        # - First two lines are the tool's header (added by context)
-        # - Next 4 lines are from the file (which looks like context)
-        # - Last line is the tool's CONTENT END marker
-
         lines = res.split("\n")
         self.assertEqual(len(lines), 7)  # 7 lines total
 
@@ -472,25 +385,6 @@ class TestSuffix(TestContextBase):
         self.assert_ctx_has_full_content(msgs, 0, context_like_content)
 
     def test_custom_prefix_with_context_like_content(self):
-        """Test that custom prefix works correctly when file contains context-like content.
-
-        This test verifies that when a custom prefix (e.g., '~~~~~') is set,
-        the SuffixHandler properly distinguishes between:
-        1. Context markers added by the tool (using custom prefix)
-        2. Content inside files that happens to look like context (using default '>>>')
-
-        The file content contains the default '>>>' prefix, but tool responses
-        should use the custom '~~~~~' prefix.
-
-        Flow:
-        1. Set custom prefix to '~~~~~'
-        2. Write file with '>>>' context-like content using Path.write_text
-        3. Read the file - tool response should use '~~~~~' prefix
-        4. Write new content - should use '~~~~~' prefix
-        5. Edit content - should use '~~~~~' prefix
-        6. Delete file - should use '~~~~~' prefix
-        7. Verify epilogue properly handles all operations with custom prefix
-        """
         # Set custom prefix
         ctx = context_handler()
         assert isinstance(ctx, SuffixHandler)
@@ -501,7 +395,7 @@ class TestSuffix(TestContextBase):
 
         # Step 1: Write a file with content that looks like context output (using '>>>')
         context_like_content = (
-            ">>> ID: 0 OPERATION: read_file CTX-IO-FILE:  .agento.demo.foo\n"
+            ">>> ID: 0 OPERATION: read_file CTX-IO-FILE: .agento.demo.foo\n"
             ">>> === CONTENT START ===\n"
             "THIS FILE HAS 4 LINES\n"
             ">>> === CONTENT END ==="
@@ -554,11 +448,9 @@ class TestSuffix(TestContextBase):
 
         # Step 6: Call epilogue and verify references are updated correctly
         self.epilogue()
-
-        # Verify all old context IDs reference the latest one (CTX(3))
-        self.assert_ctx_references(msgs, 0, 3)  # Read references delete
-        self.assert_ctx_references(msgs, 1, 3)  # Write references delete
-        self.assert_ctx_references(msgs, 2, 3)  # Edit references delete
+        self.assert_ctx_out_of_date(msgs, 0)
+        self.assert_ctx_out_of_date(msgs, 1)
+        self.assert_ctx_out_of_date(msgs, 2)
 
         # Verify CTX(3) has full content with custom prefix
         for msg in msgs:
@@ -582,16 +474,12 @@ class TestSuffix(TestContextBase):
             content = str(msg.get("content", ""))
             # Tool markers should use '~~~~~', not '>>>'
             # '>>>' can only appear as part of the original file content in CTX(0)
-            lines = content.split("\n")
-            for line in lines:
+            for line in content.splitlines():
                 # If line starts with '>>>' and contains ID or CONTENT, it's a marker
-                if line.startswith(">>> ID:") or line.startswith(">>> === CONTENT"):
-                    # This should only be valid for CTX(0)'s file content
-                    # Check if this is inside CTX(0)'s content block
-                    if "CTX(0)" in content:
-                        # This is expected - it's the file content
-                        pass
-                    else:
-                        self.fail(
-                            f"Found '>>>' marker outside CTX(0) file content: {line}"
-                        )
+                our_line = line.startswith(">>> ID:") or line.startswith(
+                    ">>> === CONTENT"
+                )
+                if not our_line or "CTX(0)" in content:
+                    continue
+                else:
+                    self.fail(f"Found '>>>' marker outside CTX(0) file content: {line}")

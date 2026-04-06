@@ -1,5 +1,5 @@
 from context.context_handler import ContextHandler
-from typing import Optional, override
+from typing import override
 
 import config
 from context.context_handler import ContextMode, ContextEntry, LlmProto
@@ -43,146 +43,189 @@ class SuffixHandler(ContextHandler):
         # Return the new content with ID
         pfx = self.prefix
         if oper == "read_file":
-            return f"{pfx} ID: {new_id} OPERATION: {oper} CTX-IO-FILE:  {path}\n{pfx} === CONTENT START ===\n{text}\n{pfx} === CONTENT END ==="
+            # Apply existing folds when reading a file
+            display_text = (
+                self.format_folded_content(path, text) if self.has_folds(path) else text
+            )
+            return f"{pfx} ID: {new_id} OPERATION: {oper} CTX-IO-FILE: {path}\n{pfx} === CONTENT START ===\n{display_text}\n{pfx} === CONTENT END ==="
         elif oper == "write_file":
             sz = Path(config.real_path(path)).stat().st_size
             lines = text.splitlines()
-            return f"{pfx} ID: {new_id} OPERATION: {oper} CTX-IO-FILE:  {path}\n{pfx} OK: {oper} {path} ({sz} bytes, {len(lines)} lines)\n{pfx} === CONTENT START ===\n{text}\n{pfx} === CONTENT END ==="
+            return f"{pfx} ID: {new_id} OPERATION: {oper} CTX-IO-FILE: {path}\n{pfx} OK: {oper} {path} ({sz} bytes, {len(lines)} lines)\n{pfx} === CONTENT START ===\n{text}\n{pfx} === CONTENT END ==="
         elif oper == "delete_file":
-            return f"{pfx} ID: {new_id} OPERATION: {oper} CTX-IO-FILE:  {path}\n{pfx} OK: {oper} {path}\n{pfx} === CONTENT START ===\n{text}\n{pfx} === CONTENT END ==="
+            return f"{pfx} ID: {new_id} OPERATION: {oper} CTX-IO-FILE: {path}\n{pfx} OK: {oper} {path}\n{pfx} === CONTENT START ===\n{text}\n{pfx} === CONTENT END ==="
         elif oper == "edit_file":
             assert edit_chunk
             replace_from, replace_with = edit_chunk
-            return f"{pfx} ID: {new_id} OPERATION: {oper} CTX-IO-FILE:  {path}\n{pfx} OK: edit {path} (replaced `{repr(replace_from)}` with `{repr(replace_with)}`)\n{pfx} === CONTENT START ===\n{text}\n{pfx} === CONTENT END ==="
+            return f"{pfx} ID: {new_id} OPERATION: {oper} CTX-IO-FILE: {path}\n{pfx} OK: edit {path} (replaced `{repr(replace_from)}` with `{repr(replace_with)}`)\n{pfx} === CONTENT START ===\n{text}\n{pfx} === CONTENT END ==="
         elif oper == "edit_diff_patch":
-            return f"{pfx} ID: {new_id} OPERATION: {oper} CTX-IO-FILE:  {path}\n{pfx} OK: {oper} {path}\n{pfx} PATCH APPLIED\n{pfx} === CONTENT START ===\n{text}\n{pfx} === CONTENT END ==="
+            return f"{pfx} ID: {new_id} OPERATION: {oper} CTX-IO-FILE: {path}\n{pfx} OK: {oper} {path}\n{pfx} PATCH APPLIED\n{pfx} === CONTENT START ===\n{text}\n{pfx} === CONTENT END ==="
+        elif oper == "file_add_fold":
+            assert edit_chunk
+            fold_name, _ = edit_chunk
+            return f"{pfx} ID: {new_id} OPERATION: {oper} CTX-IO-FILE: {path}\n{pfx} OK: fold added '{fold_name}'\n{pfx} === CONTENT START ===\n{text}\n{pfx} === CONTENT END ==="
+        elif oper == "file_unfold":
+            assert edit_chunk
+            fold_name, _ = edit_chunk
+            return f"{pfx} ID: {new_id} OPERATION: {oper} {path}\n{pfx} OK: fold removed '{fold_name}'\n{pfx} === CONTENT START ===\n{text}\n{pfx} === CONTENT END ==="
+        elif oper == "file_unfold_all":
+            assert edit_chunk
+            num_folds, _ = edit_chunk
+            return f"{pfx} ID: {new_id} OPERATION: {oper} {path}\n{pfx} OK: {num_folds} removed\n{pfx} === CONTENT START ===\n{text}\n{pfx} === CONTENT END ==="
 
         raise ValueError(f"Unknown oper {oper}")
 
     def prepare_current_llm(self, llm: LlmProto):
-        """Update all messages that reference old file content to point to new content."""
+        """Update all messages that reference old file content to point to new content.
+
+        For each file, find the latest context ID in SUFFIX_CONTEXTS and update
+        all earlier tool messages to reference the latest content instead of showing
+        outdated full content.
+        """
+        import re
+
         messages = llm.messages()
 
-        # For each tracked path, update all messages that have old CTX-IO-FILE references
-        for path, ctx in SUFFIX_CONTEXTS.items():
-            self._update_messages_for_path(messages, path, ctx)
+        # Build a map of file path -> latest context ID from SUFFIX_CONTEXTS
+        latest_contexts: dict[str, str] = {}
+        for path, entry in SUFFIX_CONTEXTS.items():
+            latest_contexts[path] = entry.id
 
-    def _update_messages_for_path(
-        self, messages: list[dict], path: str, ctx: ContextEntry
-    ):
-        """Update all messages for a given path to reference the current context.
-
-        Only updates tool messages (role="tool"), not assistant messages.
-        Assistant messages that contain file content replicas should remain unchanged.
-        """
-
+        # Process each message to update old context references
         for msg in messages:
-            if msg.get("role") != "tool" or "content" not in msg:
+            if msg.get("role") != "tool":
                 continue
 
-            content = msg["content"]
+            content = msg.get("content", "")
             if not isinstance(content, str):
                 continue
 
-            if "CTX-IO-FILE" not in content or path not in content:
+            # Find all context entries in this message
+            # Pattern: {prefix} ID: CTX(N) OPERATION: XXX path
+            pfx = re.escape(self.prefix)
+            pattern = (
+                rf"({pfx}\s*ID: CTX\((\d+)\) OPERATION: (\w+) CTX-IO-FILE:\s+(\S+))"
+            )
+            matches = list(re.finditer(pattern, content))
+
+            if not matches:
                 continue
 
-            if not content.startswith(self.prefix):
-                continue
+            # Process each context entry found in this message
+            for match in reversed(matches):
+                ctx_id_num = int(match.group(2))
+                path = match.group(4)
 
-            # Check if there are folds for this path
-            msg["content"] = self._replace_old_content(content, path, ctx.id)
+                ctx_id = f"CTX({ctx_id_num})"
 
-    def _replace_old_content(self, content: str, path: str, current_id: str) -> str:
-        """Replace file content blocks with current (folded) content.
+                # Check if this context is outdated
+                if path in latest_contexts:
+                    latest_id = latest_contexts[path]
+                    if ctx_id != latest_id:
+                        # This is an outdated context - replace with reference
+                        new_content = self._replace_outdated_context(
+                            content, ctx_id, path
+                        )
+                        msg["content"] = new_content
+                        content = new_content  # Update for subsequent replacements
+
+    def _replace_outdated_context(
+        self, content: str, old_ctx_id: str, path: str
+    ) -> str:
+        """Replace an outdated context block with a reference to the latest context.
 
         Args:
             content: Original message content
-            path: File path to replace
-            current_id: Current context ID for this file
-            folded_content: Folded content to insert
-            has_folds: If True, always replace content (to apply folds)
+            old_ctx_id: The outdated context ID (e.g., "CTX(0)")
+            path: File path
+
+        Returns:
+            Updated content with outdated context replaced by reference
         """
-        lines = content.splitlines()
-        result_lines: list[str] = []
-        i = 0
-        pfx = self.prefix
-        current_num = self._extract_id(current_id)
-        file_line_num = 0
-
-        while i < len(lines):
-            line = lines[i]
-
-            # Check if this line starts a content block (has the prefix and CTX-IO-FILE)
-            our_file = line.startswith(pfx) and "CTX-IO-FILE" in line and path in line
-            if not our_file:
-                result_lines.append(line)
-                i += 1
-                continue
-
-            old_num = self._extract_id(line)
-            should_replace = False
-            if (
-                old_num is not None
-                and current_num is not None
-                and old_num < current_num
-            ):
-                should_replace = True
-
-            header = line
-            result_lines.append(header)
-            if should_replace:
-                # Found content to replace, skip everything until CONTENT END
-                i += 1
-
-                # Skip lines until we find CONTENT END (must start with prefix)
-                while i < len(lines):
-                    if lines[i].startswith(pfx) and "=== CONTENT END ===" in lines[i]:
-                        i += 1
-                        break
-                    i += 1
-
-                # Add the header and new reference
-                result_lines.append(f"{pfx} === CONTENT IS OUT OF DATE ===")
-                result_lines.append(f"{pfx} === CONTENT END ===")
-                break
-
-            if lines[i].startswith(pfx):
-                result_lines.append(lines[i])
-                i += 1
-                continue
-
-            file_line_num += 1
-            fold = self._get_fold_at_line(path, file_line_num)
-            if not fold:
-                result_lines.append(lines[i])
-                i += 1
-                continue
-
-            result_lines.append(
-                f"{self.prefix} FOLD: {fold.name} (lines {fold.start_line}..{fold.end_line})"
-            )
-            i += fold.end_line - fold.start_line + 1
-        return "\n".join(result_lines).rstrip()
-
-    def _get_fold_at_line(self, path: str, line: int) -> Optional[Fold]:
-        if not (folds := self._folds.get(path)):
-            return None
-
-        for entry in folds:
-            if entry.start_line == line:
-                return entry
-
-        return None
-
-    def _extract_id(self, text: str) -> int | None:
-        """Extract CTX number from text like 'CTX(123)'."""
         import re
 
-        match = re.search(r"CTX\((\d+)\)", text)
-        if match:
-            return int(match.group(1))
-        return None
+        pfx = self.prefix
+
+        # Find the full context block for this context ID
+        # Pattern: from ">>> ID: CTX(N)..." to ">>> === CONTENT END ==="
+
+        # Match the header line - need to handle both regular and "outdated" operations
+        header_pattern = rf"{re.escape(pfx)}\s*ID: {re.escape(old_ctx_id)}\s+OPERATION:\s+\S+\s+CTX-IO-FILE:\s+\S+"
+        header_match = re.search(header_pattern, content)
+
+        if not header_match:
+            return content
+
+        header_start = header_match.start()
+        header_end = header_match.end()
+
+        # Find the CONTENT START marker after the header
+        content_start_marker = f"{pfx} === CONTENT START ==="
+        content_start_idx = content.find(content_start_marker, header_end)
+
+        if content_start_idx == -1:
+            return content
+
+        # Find the CONTENT END marker
+        content_end_marker = f"{pfx} === CONTENT END ==="
+        content_end_idx = content.find(content_end_marker, content_start_idx)
+
+        if content_end_idx == -1:
+            return content
+
+        # Find the end of the CONTENT END line
+        content_end_line_end = content.find("\n", content_end_idx)
+        if content_end_line_end == -1:
+            content_end_line_end = len(content)
+
+        # Replace the entire block with a reference
+        old_block = content[header_start:content_end_line_end]
+        new_block = (
+            f"{pfx} ID: {old_ctx_id} OPERATION: outdated {path}\n"
+            f"{pfx} === Content is out of date (updated version below) ==\n"
+        )
+
+        return content.replace(old_block, new_block, 1)
+
+    def _format_fold_result(
+        self, path: str, folded_text: str, oper: str, fold_info: str
+    ) -> str:
+        """Format fold result message, updating SUFFIX_CONTEXTS to track latest context.
+
+        This method updates the context entry's ID to mark this as the current state
+        for outdated detection, while preserving the original file content for validation.
+
+        Args:
+            path: File path
+            folded_text: Formatted content with folds applied (for display only)
+            oper: Operation type
+            fold_info: Name of fold (or number of folds for unfold_all)
+
+        Returns:
+            Formatted result message
+        """
+        ContextEntry.last_id += 1
+        new_id = f"CTX({ContextEntry.last_id})"
+        pfx = self.prefix
+
+        # Update the context entry's ID but keep original text for validation
+        # This allows prepare_current_llm to mark previous reads as outdated
+        # while still preserving original content for fold validation
+        if path in SUFFIX_CONTEXTS:
+            old_entry = SUFFIX_CONTEXTS[path]
+            # Keep the original text, update ID and operation
+            SUFFIX_CONTEXTS[path] = ContextEntry(
+                old_entry.path, old_entry.text, new_id, oper
+            )
+
+        if oper == "file_add_fold":
+            return f"{pfx} ID: {new_id} OPERATION: {oper} {path}\n{pfx} OK: fold added '{fold_info}'\n{pfx} === CONTENT START ===\n{folded_text}\n{pfx} === CONTENT END ==="
+        elif oper == "file_unfold":
+            return f"{pfx} ID: {new_id} OPERATION: {oper} {path}\n{pfx} OK: fold removed '{fold_info}'\n{pfx} === CONTENT START ===\n{folded_text}\n{pfx} === CONTENT END ==="
+        elif oper == "file_unfold_all":
+            return f"{pfx} ID: {new_id} OPERATION: {oper} {path}\n{pfx} OK: {fold_info} removed\n{pfx} === CONTENT START ===\n{folded_text}\n{pfx} === CONTENT END ==="
+
+        raise ValueError(f"Unknown oper {oper}")
 
     # Fold operations
     def add_fold(
@@ -207,90 +250,91 @@ class SuffixHandler(ContextHandler):
         Returns:
             Success message with fold info or error dict
         """
-        # Check if file exists in context first
+        # Check if file has been read
         if path not in SUFFIX_CONTEXTS:
-            return {"error": f"File {path} not loaded into context"}
+            return {
+                path: "error",
+                "error": f"File {path} has not been read. Read it first with read_file.",
+            }
 
-        ctx: ContextEntry = SUFFIX_CONTEXTS[path]
-        text = ctx.text
+        # Get file content and lines
+        text = SUFFIX_CONTEXTS[path].text
         lines = text.splitlines()
 
-        # Validate line numbers are within bounds
-        if fold_from_line_num < 1 or fold_from_line_num > len(lines):
+        # Validate line numbers
+        if fold_from_line_num < 1:
             return {
-                "error": f"fold_from_line_num {fold_from_line_num} out of range (1..{len(lines)})"
+                path: "error",
+                "error": f"fold_from_line_num must be >= 1, got {fold_from_line_num}",
             }
-        if fold_to_line_num < 1 or fold_to_line_num > len(lines):
+        if fold_to_line_num < 1:
             return {
-                "error": f"fold_to_line_num {fold_to_line_num} out of range (1..{len(lines)})"
+                path: "error",
+                "error": f"fold_to_line_num must be >= 1, got {fold_to_line_num}",
             }
-
-        # Validate that fold_to_line_num is after fold_from_line_num
-        if fold_to_line_num < fold_from_line_num:
+        if fold_from_line_num > fold_to_line_num:
             return {
-                "error": f"fold_to_line_num ({fold_to_line_num}) must be >= fold_from_line_num ({fold_from_line_num})"
+                path: "error",
+                "error": f"fold_from_line_num ({fold_from_line_num}) must be <= fold_to_line_num ({fold_to_line_num})",
             }
-
-        # Validate that fold_from_line matches the actual line content
-        actual_from_line = lines[fold_from_line_num - 1]
-        if fold_from_line not in actual_from_line:
+        if fold_to_line_num > len(lines):
             return {
-                "error": f"fold_from_line '{fold_from_line}' does not match actual line {fold_from_line_num}: '{actual_from_line}'"
-            }
-
-        # Validate that fold_to_line matches the actual line content
-        actual_to_line = lines[fold_to_line_num - 1]
-        if fold_to_line not in actual_to_line:
-            return {
-                "error": f"fold_to_line '{fold_to_line}' does not match actual line {fold_to_line_num}: '{actual_to_line}'"
+                path: "error",
+                "error": f"fold_to_line_num ({fold_to_line_num}) exceeds file line count ({len(lines)})",
             }
 
+        # Validate line content matches
+        # Convert to 0-indexed
+        from_idx = fold_from_line_num - 1
+        to_idx = fold_to_line_num - 1
+
+        actual_from_line = lines[from_idx]
+        actual_to_line = lines[to_idx]
+
+        # Strip trailing whitespace for comparison
+        if actual_from_line.rstrip() != fold_from_line.rstrip():
+            return {
+                path: "error",
+                "error": f"Line {fold_from_line_num} content mismatch. Expected `{repr(fold_from_line)}`, got `{repr(actual_from_line)}`",
+            }
+        if actual_to_line.rstrip() != fold_to_line.rstrip():
+            return {
+                path: "error",
+                "error": f"Line {fold_to_line_num} content mismatch. Expected `{repr(fold_to_line)}`, got `{repr(actual_to_line)}`",
+            }
+
+        # Check if fold with same name already exists
+        if path in self._folds:
+            for existing_fold in self._folds[path]:
+                if existing_fold.name == name:
+                    return {
+                        path: "error",
+                        "error": f"Fold with name '{name}' already exists for {path}",
+                    }
+
+        # Check for overlapping folds
+        if path in self._folds:
+            new_fold = Fold(name, fold_from_line_num, fold_to_line_num)
+            for existing_fold in self._folds[path]:
+                # Check if ranges overlap
+                if not (
+                    new_fold.end_line < existing_fold.start_line
+                    or new_fold.start_line > existing_fold.end_line
+                ):
+                    return {
+                        path: "error",
+                        "error": f"Fold '{name}' overlaps with existing fold '{existing_fold.name}' (lines {existing_fold.start_line}..{existing_fold.end_line})",
+                    }
+
+        # Create and store the fold
+        fold = Fold(name, fold_from_line_num, fold_to_line_num)
         if path not in self._folds:
             self._folds[path] = []
-
-        # Check for duplicate fold name in this file
-        if any(fold.name == name for fold in self._folds[path]):
-            return {"error": f"Fold with name '{name}' already exists in {path}"}
-
-        # Check for overlap with existing folds
-        overlap_result = self._check_fold_overlap(
-            path, fold_from_line_num, fold_to_line_num
-        )
-        if overlap_result is not None:
-            return overlap_result
-
-        # Create the fold
-        fold = Fold(
-            name=name,
-            start_line=fold_from_line_num,
-            end_line=fold_to_line_num,
-        )
         self._folds[path].append(fold)
 
-        return config.real_path(path).read_text()
-
-    def _check_fold_overlap(
-        self, path: str, start_line: int, end_line: int
-    ) -> dict | None:
-        """Check if a new fold overlaps with existing folds.
-
-        Args:
-            path: File path
-            start_line: Proposed start line of new fold
-            end_line: Proposed end line of new fold
-
-        Returns:
-            Error dict if overlap detected, None if valid
-        """
-        existing_folds = self._folds.get(path, [])
-
-        for fold in existing_folds:
-            if not (end_line < fold.start_line - 1 or start_line > fold.end_line + 1):
-                return {
-                    "error": f"New fold (lines {start_line}..{end_line}) would overlap with existing fold '{fold.name}' (lines {fold.start_line}..{fold.end_line}). At least one line buffer required between folds."
-                }
-
-        return None
+        # Format content with folds
+        folded_text = self.format_folded_content(path, text)
+        return self._format_fold_result(path, folded_text, "file_add_fold", fold.name)
 
     def unfold(self, path: str, name: str) -> dict | str:
         """Remove a fold by name.
@@ -302,22 +346,37 @@ class SuffixHandler(ContextHandler):
         Returns:
             Success message or error dict
         """
+        # Check if file has folds
         if path not in self._folds:
-            return {"error": f"No folds found for file {path}"}
+            return {
+                path: "error",
+                "error": f"No folds exist for file {path}",
+            }
 
-        # Find and remove the fold
-        folds = self._folds[path]
-        for i, fold in enumerate(folds):
+        # Find the fold
+        fold_to_remove = None
+        for fold in self._folds[path]:
             if fold.name == name:
-                del folds[i]
-                pfx = self.prefix
-                new_id = f"CTX({ContextEntry.last_id})"
-                return (
-                    f"{pfx} ID: {new_id} OPERATION: unfold CTX-IO-FILE:  {path}\n"
-                    f"{pfx} OK: Removed fold '{name}'\n"
-                )
+                fold_to_remove = fold
+                break
 
-        return {"error": f"Fold '{name}' not found in {path}"}
+        if fold_to_remove is None:
+            return {
+                path: "error",
+                "error": f"Fold '{name}' not found in {path}",
+            }
+
+        # Remove the fold
+        self._folds[path].remove(fold_to_remove)
+
+        # If no more folds, clean up
+        if not self._folds[path]:
+            del self._folds[path]
+
+        # Format with remaining folds (or no folds if this was the last one)
+        text = SUFFIX_CONTEXTS[path].text
+        folded_text = self.format_folded_content(path, text)
+        return self._format_fold_result(path, folded_text, "file_unfold", name)
 
     def unfold_all(self, path: str) -> dict | str:
         """Remove all folds from a file.
@@ -328,15 +387,25 @@ class SuffixHandler(ContextHandler):
         Returns:
             Success message or error dict
         """
+        # Check if file has folds
         if path not in self._folds:
-            return {"error": f"No folds found for file {path}"}
+            return {
+                path: "error",
+                "error": f"No folds exist for file {path}",
+            }
 
+        # Get fold names for reporting
+        fold_names = [fold.name for fold in self._folds[path]]
+        num_folds = len(fold_names)
+
+        # Remove all folds
         del self._folds[path]
-        pfx = self.prefix
-        new_id = f"CTX({ContextEntry.last_id})"
-        return (
-            f"{pfx} ID: {new_id} OPERATION: unfold_all CTX-IO-FILE:  {path}\n"
-            f"{pfx} OK: Removed all folds from {path}\n"
+
+        # Format with no folds (full content)
+        text = SUFFIX_CONTEXTS[path].text
+        folded_text = self.format_folded_content(path, text)
+        return self._format_fold_result(
+            path, folded_text, "file_unfold_all", f"{num_folds} folds"
         )
 
     def get_folds(self, path: str) -> list[Fold]:
@@ -347,178 +416,89 @@ class SuffixHandler(ContextHandler):
         """Check if a file has any folds."""
         return path in self._folds and len(self._folds[path]) > 0
 
-    def get_visible_lines(self, path: str) -> list[int]:
-        """Get all visible (non-folded) line numbers for a file.
+    def format_folded_content(self, path: str, text: str) -> str:
+        """Format file content with folds applied.
 
-        Args:
-            path: File path
-
-        Returns:
-            List of 1-indexed line numbers that are visible (not folded)
+        Returns visible content with fold markers replacing folded lines.
         """
-        folds = self._folds.get(path, [])
-        if not folds:
-            return list(range(1, len(SUFFIX_CONTEXTS[path].text.splitlines()) + 1))
+        if path not in self._folds or not self._folds[path]:
+            return text.rstrip()
 
-        visible_lines: list[int] = []
-        sorted_folds = sorted(folds, key=lambda f: f.start_line)
+        lines = text.splitlines()
+        result_lines = []
 
-        prev_end = 0
-        for fold in sorted_folds:
-            # Add lines before this fold
-            for line_num in range(prev_end + 1, fold.start_line):
-                visible_lines.append(line_num)
-            prev_end = fold.end_line
+        # Sort folds by start line
+        sorted_folds = sorted(self._folds[path], key=lambda f: f.start_line)
 
-        # Add lines after all folds
-        if path in SUFFIX_CONTEXTS:
-            total_lines = len(SUFFIX_CONTEXTS[path].text.splitlines())
-            for line_num in range(prev_end + 1, total_lines + 1):
-                visible_lines.append(line_num)
+        fold_idx = 0
+        current_line = 1  # 1-indexed line number
 
-        return visible_lines
+        while current_line <= len(lines):
+            # Check if we're at the start of a fold
+            if (
+                fold_idx < len(sorted_folds)
+                and current_line == sorted_folds[fold_idx].start_line
+            ):
+                fold = sorted_folds[fold_idx]
+                # Add fold marker
+                pfx = self.prefix
+                fold_marker = f"{pfx} >> FOLD: lines {fold.start_line}..{fold.end_line} ({fold.name})"
+                result_lines.append(fold_marker)
+                # Skip to after the fold
+                current_line = fold.end_line + 1
+                fold_idx += 1
+            else:
+                # Add the current line
+                result_lines.append(lines[current_line - 1])
+                current_line += 1
 
-    def is_line_visible(self, path: str, line_num: int) -> bool:
-        """Check if a specific line is visible (not folded).
-
-        Args:
-            path: File path
-            line_num: 1-indexed line number
-
-        Returns:
-            True if the line is visible, False if it's folded
-        """
-        return line_num in self.get_visible_lines(path)
-
-    def count_occurrences_in_visible(
-        self, path: str, text: str
-    ) -> tuple[int, list[int]]:
-        """Count occurrences of text in visible (non-folded) content.
-
-        Args:
-            path: File path
-            text: Text to search for (can span multiple lines)
-
-        Returns:
-            Tuple of (count, list of 1-indexed line numbers where text starts in visible content)
-        """
-        if path not in SUFFIX_CONTEXTS:
-            return (0, [])
-
-        text_content = SUFFIX_CONTEXTS[path].text
-        lines = text_content.splitlines()
-        visible_lines = self.get_visible_lines(path)
-        visible_line_set = set(visible_lines)
-
-        # Build visible content (concatenating visible lines with newlines)
-        visible_content = ""
-        for i, line in enumerate(lines):
-            line_num = i + 1  # 1-indexed
-            if line_num in visible_line_set:
-                if visible_content:
-                    visible_content += "\n"
-                visible_content += line
-
-        # Count occurrences in visible content
-        count = 0
-        occurrences: list[int] = []
-        start = 0
-        while True:
-            idx = visible_content.find(text, start)
-            if idx == -1:
-                break
-            count += 1
-            # Calculate which line this occurrence starts on
-            # Count newlines before the match
-            newlines_before = visible_content[:idx].count("\n")
-            line_num = newlines_before + 1  # 1-indexed
-            occurrences.append(line_num)
-            start = idx + 1
-
-        return (count, occurrences)
-
-    def is_text_visible(self, path: str, text: str) -> bool:
-        """Check if text exists in visible (non-folded) content.
-
-        Args:
-            path: File path
-            text: Text to search for
-
-        Returns:
-            True if text exists in visible content, False otherwise
-        """
-        count, _ = self.count_occurrences_in_visible(path, text)
-        return count > 0
+        return "\n".join(result_lines)
 
     def update_fold_line_numbers(
         self, path: str, old_line_count: int, new_line_count: int
     ) -> None:
-        """Update fold line numbers after file content changes.
-
-        Args:
-            path: File path
-            old_line_count: Number of lines before edit
-            new_line_count: Number of lines after edit
-        """
+        """Update fold line numbers when file content changes."""
         if path not in self._folds:
             return
 
-        line_diff = new_line_count - old_line_count
-        if line_diff == 0:
-            return
+        line_delta = new_line_count - old_line_count
 
-        folds = self._folds[path]
+        for fold in self._folds[path]:
+            fold.start_line += line_delta
+            fold.end_line += line_delta
 
-        for fold in folds:
-            # Determine if fold is affected by the change
-            # For simplicity, we'll update all folds that start after the edit point
-            # This is a simplified approach - in practice, we'd need to know where the edit occurred
-
-            fold.start_line += line_diff
-            fold.end_line += line_diff
-
-            # Ensure line numbers stay valid
-            fold.start_line = max(1, fold.start_line)
-            fold.end_line = max(fold.start_line, fold.end_line)
-            fold.end_line = min(new_line_count, fold.end_line)
+            # Ensure folds stay within bounds
+            if fold.start_line < 1:
+                fold.start_line = 1
+            if fold.end_line > new_line_count:
+                fold.end_line = new_line_count
 
     def validate_edit_in_visible_content(
         self, path: str, replace_from: str
     ) -> tuple[bool, str]:
-        """Validate that an edit target is visible and unique.
-
-        Args:
-            path: File path
-            replace_from: Text to find
+        """Check if text exists exactly once in visible (non-folded) content.
 
         Returns:
             Tuple of (is_valid, error_message)
         """
         if path not in SUFFIX_CONTEXTS:
-            return (False, f"File {path} not in context")
+            return (False, f"File {path} has not been read")
 
-        text_content = SUFFIX_CONTEXTS[path].text
+        text = SUFFIX_CONTEXTS[path].text
+        visible_content = self.format_folded_content(path, text)
 
-        # First check if text exists at all in the file
-        if replace_from not in text_content:
-            return (False, f"Text `{repr(replace_from)}` not found in file")
-
-        # Check if text exists in visible content
-        count, line_nums = self.count_occurrences_in_visible(path, replace_from)
+        # Count occurrences in visible content
+        count = visible_content.count(replace_from)
 
         if count == 0:
-            # Text exists but only in folded content
             return (
                 False,
-                f"Text `{repr(replace_from)}` exists only in folded (hidden) content",
+                f"`{repr(replace_from)}` not found in visible content (may be in a folded region)",
             )
-
         if count > 1:
-            # Text appears multiple times in visible content
             return (
                 False,
-                f"Text `{repr(replace_from)}` appears {count} times in visible content (lines {line_nums}), must be unique",
+                f"`{repr(replace_from)}` appears {count} times in visible content (must be exactly once)",
             )
 
-        # Text exists exactly once in visible content - valid edit
         return (True, "")
