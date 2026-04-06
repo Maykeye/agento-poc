@@ -1,10 +1,8 @@
 from context import context_handler
 from context import set_context_mode, ContextMode
-from context import set_context_mode, ContextMode
-from llm import LLM
 from llm import LLM, LlmInstace
 from tests.test_helper import TestBase, tmpfilename
-import tool_io
+import tool_edit_patch
 import unittest
 
 
@@ -21,7 +19,7 @@ class TestDiffPatch(TestBase):
         llm = LLM.INSTANCES[-1].llm
         msgs = LLM.INSTANCES[-1].messages
         msgs.append(llm.msg_assistant(f"Patch {path}"))
-        result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
+        result = tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
         self.append_tool_call_result("edit_diff_patch", msgs, result)
         return result
 
@@ -43,7 +41,7 @@ class TestDiffPatch(TestBase):
 -text
 +modified"""
         # Normalize the patch to ensure proper unified diff format
-        result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
+        result = tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
 
         self.assertIn("PATCH APPLIED", result)
         self.assertIn("edit_diff_patch", result)
@@ -62,7 +60,7 @@ class TestDiffPatch(TestBase):
 +++ b/{empty_file.name}
 @@ -0,0 +1 @@
 +new content"""
-            result = tool_io.ToolEditDiffPatch()(empty_file.name, patch)
+            result = tool_edit_patch.ToolEditDiffPatch()(empty_file.name, patch)
 
             self.assertIn("PATCH APPLIED", result)
             # patch command adds trailing newline to file content
@@ -74,7 +72,7 @@ class TestDiffPatch(TestBase):
         """Test patch validation - missing header lines."""
         invalid_patch = "just some text\nno headers here"
 
-        result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, invalid_patch)
+        result = tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, invalid_patch)
 
         self.assertIn("error", str(result))
         error_msg = self.get_error_message(result)
@@ -86,7 +84,7 @@ class TestDiffPatch(TestBase):
 -foo
 +bar"""
 
-        result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, invalid_patch)
+        result = tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, invalid_patch)
 
         self.assertIn("error", str(result))
         error_msg = self.get_error_message(result)
@@ -99,7 +97,7 @@ class TestDiffPatch(TestBase):
 -foo
 +bar"""
 
-        result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, invalid_patch)
+        result = tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, invalid_patch)
 
         self.assertIn("error", str(result))
         error_msg = self.get_error_message(result)
@@ -119,7 +117,7 @@ class TestDiffPatch(TestBase):
 -bar
 +baz"""
 
-        result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, invalid_patch)
+        result = tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, invalid_patch)
 
         self.assertIn("error", str(result))
         error_msg = self.get_error_message(result)
@@ -134,7 +132,7 @@ class TestDiffPatch(TestBase):
 -bar
 +modified"""
 
-        result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
+        result = tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
 
         self.assertIn("error", str(result))
         error_msg = self.get_error_message(result)
@@ -144,7 +142,7 @@ class TestDiffPatch(TestBase):
         """Test patch validation - empty patch."""
         empty_patch = ""
 
-        result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, empty_patch)
+        result = tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, empty_patch)
 
         self.assertIn("error", str(result))
         error_msg = self.get_error_message(result)
@@ -154,7 +152,7 @@ class TestDiffPatch(TestBase):
         """Test patch validation - single line patch."""
         single_line = "--- a/foo"
 
-        result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, single_line)
+        result = tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, single_line)
 
         self.assertIn("error", str(result))
         error_msg = self.get_error_message(result)
@@ -177,7 +175,7 @@ class TestDiffPatch(TestBase):
  line4
  line5"""
 
-        result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
+        result = tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
 
         self.assertIn("PATCH APPLIED", result)
         self.assertEqual(
@@ -196,7 +194,7 @@ class TestDiffPatch(TestBase):
 -remove this
  keep also"""
 
-        result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
+        result = tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
 
         self.assertIn("PATCH APPLIED", result)
         self.assertEqual(self.FILE_FOO.read_text(), "keep this\nkeep also")
@@ -213,7 +211,7 @@ class TestDiffPatch(TestBase):
 +inserted line
  line3"""
 
-        result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
+        result = tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
 
         self.assertIn("PATCH APPLIED", result)
         self.assertEqual(self.FILE_FOO.read_text(), "line1\ninserted line\nline3")
@@ -235,7 +233,7 @@ class TestDiffPatch(TestBase):
 -third
 +THIRD"""
 
-        result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
+        result = tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
 
         self.assertIn("PATCH APPLIED", result)
         self.assertEqual(self.FILE_FOO.read_text(), new_content)
@@ -254,7 +252,7 @@ class TestDiffPatch(TestBase):
 -same content
 +same content"""
 
-        result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
+        result = tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
 
         # Patch should apply successfully even though the content doesn't change
         self.assertIn("PATCH APPLIED", result)
@@ -273,7 +271,7 @@ class TestDiffPatch(TestBase):
 -incorrect match
 +correct match"""
 
-        result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, bad_patch)
+        result = tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, bad_patch)
 
         self.assertIn("error", str(result))
         # The patch should fail because it can't find the line to delete
@@ -295,7 +293,7 @@ class TestDiffPatch(TestBase):
 -\ttabs\t
 +no tabs"""
 
-        result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
+        result = tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
 
         self.assertIn("PATCH APPLIED", result)
         self.assertEqual(self.FILE_FOO.read_text(), new_content)
@@ -313,7 +311,7 @@ class TestDiffPatch(TestBase):
 -text
 +modified
 """
-        result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
+        result = tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
         self.assertIn("PATCH APPLIED", result)
         self.assertIn("edit_diff_patch", result)
         self.assertEqual(self.FILE_FOO.read_text(), "foo\nmodified\n")
@@ -334,7 +332,7 @@ class TestDiffPatch(TestBase):
 +modified
 """
 
-        result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
+        result = tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
 
         # Verify the result contains PATCH APPLIED in the tool response
         # and the SUFFIX context markers
