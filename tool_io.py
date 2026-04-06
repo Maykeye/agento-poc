@@ -1,5 +1,7 @@
 from pathlib import Path
 from typing import Annotated
+from datetime import datetime
+import random
 import os
 from config import real_path, READ_ONLY_FILES, READ_ONLE_ERROR
 from tool import Tool, run_executable
@@ -509,6 +511,11 @@ class ToolEditDiffPatch(Tool):
         if p.exists() and not p.is_file():
             return {path: "error", "error": f"File exists, but it is not a file"}
 
+        # Read original content BEFORE patching (for debug saves if patch fails)
+        original_content = ""
+        if p.exists():
+            original_content = p.read_text()
+
         # Validate patch format
         lines = patch.splitlines()
         if len(lines) < 2:
@@ -556,6 +563,8 @@ class ToolEditDiffPatch(Tool):
         )
 
         if result.get("exitcode") != 0:
+            # Save debug files when patch fails
+            _save_debug_patch_files(path, original_content, patch)
             return {
                 path: "error",
                 "error": f"Patch failed with exit code {result.get('exitcode')}",
@@ -574,3 +583,25 @@ class ToolEditDiffPatch(Tool):
             handler.update_fold_line_numbers(path, old_line_count, new_line_count)
 
         return handler.update(path, new_text, "edit_diff_patch")
+
+
+def _save_debug_patch_files(
+    path: str, original_content: str, patch_content: str
+) -> None:
+    """Save debug files when patch fails - stores original and patch in temp dir."""
+    # Get user ID for temp directory
+    uid = os.getuid()
+    temp_dir = Path(f"/run/user/{uid}")
+
+    # Create simplified path (replace / with _)
+    simplified_path = path.replace("/", "_")
+
+    # Generate timestamp and random suffix
+    timestamp = datetime.now().strftime("%Y%m%d.%H%M%S")
+    rng = random.randint(10000, 99999)
+
+    orig_file = temp_dir / f"{simplified_path}.orig.{timestamp}.{rng}"
+    orig_file.write_text(original_content)
+
+    patch_file = temp_dir / f"{simplified_path}.patch.{timestamp}.{rng}"
+    patch_file.write_text(patch_content)
