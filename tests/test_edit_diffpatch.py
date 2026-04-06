@@ -5,8 +5,6 @@ from tests.test_helper import TestBase, tmpfilename
 import tool_edit_patch
 import unittest
 
-import tool_io
-
 
 class TestDiffPatch(TestBase):
     """Tests for the edit_diff_patch tool."""
@@ -53,22 +51,16 @@ class TestDiffPatch(TestBase):
 
     def test_edit_diff_patch_empty_file(self):
         """Test patching an empty file."""
-        # Create an empty file for this test
-        empty_file = tmpfilename(".empty.test")
-        empty_file.write_text("")
-
-        try:
-            patch = f"""--- a/{empty_file.name}
-+++ b/{empty_file.name}
+        self.FILE_FOO.write_text("")
+        patch = f"""--- a/{self.FILE_FOO.name}
++++ b/{self.FILE_FOO.name}
 @@ -0,0 +1 @@
 +new content"""
-            result = tool_edit_patch.ToolEditDiffPatch()(empty_file.name, patch)
+        result = tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
 
-            self.assertIn("PATCH APPLIED", result)
-            # patch command adds trailing newline to file content
-            self.assertEqual(empty_file.read_text(), "new content\n")
-        finally:
-            empty_file.unlink(True)
+        self.assertIn("PATCH APPLIED", result)
+        # patch command adds trailing newline to file content
+        self.assertEqual(self.FILE_FOO.read_text(), "new content\n")
 
     def test_edit_diff_patch_invalid_format_no_header(self):
         """Test patch validation - missing header lines."""
@@ -142,10 +134,7 @@ class TestDiffPatch(TestBase):
 
     def test_edit_diff_patch_empty_patch(self):
         """Test patch validation - empty patch."""
-        empty_patch = ""
-
-        result = tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, empty_patch)
-
+        result = tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, "")
         self.assertIn("error", str(result))
         error_msg = self.get_error_message(result)
         self.assertIn("Patch must have at least two lines", error_msg)
@@ -446,39 +435,32 @@ class TestDiffPatch(TestBase):
         self.assertIn("LINE10", content)
         self.assertIn("LINE20", content)
 
-    def test_lhs_fix(self):
+    def impl_count_fix(self, lhs, rhs):
+        set_context_mode(ContextMode.SUFFIX)
         self.FILE_FOO.write_text("line1\nline2\nline3\nline4")
-        tool_io.ToolReadFile()(self.FILE_FOO.name)
-        res = tool_edit_patch.ToolEditDiffPatch()(
+        self.tool_call_read(self.FILE_FOO)
+        self.tool_call_patch(
             self.FILE_FOO.name,
             f"""--- a/{self.FILE_FOO.name}
 +++ b/{self.FILE_FOO.name}
-@@ -1,2 +1,4 @@
+@@ -1,{lhs} +1,{rhs} @@
  line1
  line2
 -line3
 +line_changed
- line4
-        """,
+ line4""",
         )
-        self.assertNotIn("error", res)
+        res_idx = len(self.messages) - 1
+        self.assertNotIn("error", self.messages[-1]["content"])
+        self.epilogue()
+        res = self.messages[res_idx]["content"]
+        self.assertIn("line_changed", res)
+
+    def test_lhs_fix(self):
+        self.impl_count_fix(2, 4)
 
     def test_rhs_fix(self):
-        self.FILE_FOO.write_text("line1\nline2\nline3\nline4")
-        tool_io.ToolReadFile()(self.FILE_FOO.name)
-        res = tool_edit_patch.ToolEditDiffPatch()(
-            self.FILE_FOO.name,
-            f"""--- a/{self.FILE_FOO.name}
-+++ b/{self.FILE_FOO.name}
-@@ -1,4 +1,2 @@
- line1
- line2
--line3
-+line_changed
- line4
-        """,
-        )
-        self.assertNotIn("error", res)
+        self.impl_count_fix(4, 2)
 
 
 if __name__ == "__main__":
