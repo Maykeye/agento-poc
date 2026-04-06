@@ -5,6 +5,8 @@ from tests.test_helper import TestBase, tmpfilename
 import tool_edit_patch
 import unittest
 
+import tool_io
+
 
 class TestDiffPatch(TestBase):
     """Tests for the edit_diff_patch tool."""
@@ -12,7 +14,7 @@ class TestDiffPatch(TestBase):
     def setUp(self):
         super().setUp()
         # Initialize LLM properly like other tests do
-        self.llm, _ = self.init_llm_msgs()
+        self.llm, self.messages = self.init_llm_msgs()
         context_handler().prepare_current_llm(self.llm)
 
     def tool_call_patch(self, path: str, patch: str):
@@ -404,8 +406,6 @@ class TestDiffPatch(TestBase):
         content = msgs[result1_idx]["content"]
         self.assertIn("ID: CTX(0)", content)
         self.assertIn("out of date", content)
-        # The outdated message should not contain the original file content
-        # (but may contain "line" in the file path, so we check for specific patterns)
         self.assertNotIn("line1\n", content)
         self.assertNotIn("line2\n", content)
 
@@ -445,6 +445,40 @@ class TestDiffPatch(TestBase):
         self.assertIn("LINE1\n", content)
         self.assertIn("LINE10", content)
         self.assertIn("LINE20", content)
+
+    def test_lhs_fix(self):
+        self.FILE_FOO.write_text("line1\nline2\nline3\nline4")
+        tool_io.ToolReadFile()(self.FILE_FOO.name)
+        res = tool_edit_patch.ToolEditDiffPatch()(
+            self.FILE_FOO.name,
+            f"""--- a/{self.FILE_FOO.name}
++++ b/{self.FILE_FOO.name}
+@@ -1,2 +1,4 @@
+ line1
+ line2
+-line3
++line_changed
+ line4
+        """,
+        )
+        self.assertNotIn("error", res)
+
+    def test_rhs_fix(self):
+        self.FILE_FOO.write_text("line1\nline2\nline3\nline4")
+        tool_io.ToolReadFile()(self.FILE_FOO.name)
+        res = tool_edit_patch.ToolEditDiffPatch()(
+            self.FILE_FOO.name,
+            f"""--- a/{self.FILE_FOO.name}
++++ b/{self.FILE_FOO.name}
+@@ -1,4 +1,2 @@
+ line1
+ line2
+-line3
++line_changed
+ line4
+        """,
+        )
+        self.assertNotIn("error", res)
 
 
 if __name__ == "__main__":
