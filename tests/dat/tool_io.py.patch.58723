@@ -1,0 +1,32 @@
+--- a/tool_io.py.orig.58723
++++ b/tool_io.py.orig.58723
+@@ -1,4 +1,5 @@
+ from pathlib import Path
+ from typing import Annotated
++from datetime import datetime
+ import random
+ import os
+ from config import real_path, READ_ONLY_FILES, READ_ONLE_ERROR
+@@ -512,13 +513,17 @@ def _save_debug_patch_files(
+ ) -> None:
+     """Save debug files when patch fails - stores original and patch in temp dir."""
+     # Get user ID for temp directory
+     uid = os.getuid()
+     temp_dir = Path(f"/run/user/{uid}")
+
+     # Create simplified path (replace / with _)
+     simplified_path = path.replace("/", "_")
+
+     # Generate random suffix
+     rng = random.randint(10000, 99999)
+
+-    orig_file = temp_dir / f"{simplified_path}.orig.{rng}"
++    # Generate timestamp
++    timestamp = datetime.now().strftime("%Y%m%d.%H%M%S")
++
++    orig_file = temp_dir / f"{simplified_path}.orig.{timestamp}.{rng}"
+     orig_file.write_text(original_content)
+
+-    patch_file = temp_dir / f"{simplified_path}.patch.{rng}"
++    patch_file = temp_dir / f"{simplified_path}.patch.{timestamp}.{rng}"
+     patch_file.write_text(patch_content)
