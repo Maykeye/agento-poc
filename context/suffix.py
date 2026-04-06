@@ -1,5 +1,5 @@
 from context.context_handler import ContextHandler
-from typing import override
+from typing import Optional, override
 
 import config
 from context.context_handler import ContextMode, ContextEntry, LlmProto
@@ -77,14 +77,9 @@ class SuffixHandler(ContextHandler):
         """
 
         for msg in messages:
-            # Skip non-tool messages (e.g., assistant messages)
-            # Assistant messages may contain replicas of tool results, but they
-            # should not be modified during epilogue
-            if msg.get("role") != "tool":
+            if msg.get("role") != "tool" or "content" not in msg:
                 continue
 
-            if "content" not in msg:
-                continue
             content = msg["content"]
             if not isinstance(content, str):
                 continue
@@ -96,21 +91,9 @@ class SuffixHandler(ContextHandler):
                 continue
 
             # Check if there are folds for this path
-            has_folds = self.has_folds(path)
-            # Get the folded content (or original if no folds)
-            folded_content = self.format_folded_content(path, ctx.text)
-            msg["content"] = self._replace_old_content(
-                content, path, ctx.id, folded_content, has_folds
-            )
+            msg["content"] = self._replace_old_content(content, path, ctx.id)
 
-    def _replace_old_content(
-        self,
-        content: str,
-        path: str,
-        current_id: str,
-        folded_content: str = "",
-        has_folds: bool = False,
-    ) -> str:
+    def _replace_old_content(self, content: str, path: str, current_id: str) -> str:
         """Replace file content blocks with current (folded) content.
 
         Args:
@@ -125,60 +108,72 @@ class SuffixHandler(ContextHandler):
         i = 0
         pfx = self.prefix
         current_num = self._extract_id(current_id)
+        file_line_num = 0
 
         while i < len(lines):
             line = lines[i]
 
             # Check if this line starts a content block (has the prefix and CTX-IO-FILE)
-            if line.startswith(pfx) and "CTX-IO-FILE" in line and path in line:
-                old_num = self._extract_id(line)
+            our_file = line.startswith(pfx) and "CTX-IO-FILE" in line and path in line
+            if not our_file:
+                result_lines.append(line)
+                i += 1
+                continue
 
-                # Determine if we should replace:
-                # 1. If has_folds is True, always replace (to apply folds)
-                # 2. If content has fold markers but has_folds is False, always replace (to remove folds)
-                # 3. If old ID < current ID, replace (to update to new content)
-                should_replace = False
-                if has_folds:
-                    should_replace = True
-                elif f"{self.prefix} FOLD:" in content:
-                    # Content has fold markers but currently has no folds
-                    # This means folds were removed, so we need to update
-                    should_replace = True
-                elif (
-                    old_num is not None
-                    and current_num is not None
-                    and old_num < current_num
-                ):
-                    should_replace = True
+            old_num = self._extract_id(line)
+            should_replace = False
+            if (
+                old_num is not None
+                and current_num is not None
+                and old_num < current_num
+            ):
+                should_replace = True
 
-                if should_replace:
-                    # Found content to replace, skip everything until CONTENT END
-                    header = line
+            header = line
+            result_lines.append(header)
+            if should_replace:
+                # Found content to replace, skip everything until CONTENT END
+                i += 1
+
+                # Skip lines until we find CONTENT END (must start with prefix)
+                while i < len(lines):
+                    if lines[i].startswith(pfx) and "=== CONTENT END ===" in lines[i]:
+                        i += 1
+                        break
                     i += 1
 
-                    # Skip lines until we find CONTENT END (must start with prefix)
-                    while i < len(lines):
-                        if (
-                            lines[i].startswith(pfx)
-                            and "=== CONTENT END ===" in lines[i]
-                        ):
-                            i += 1
-                            break
-                        i += 1
+                # Add the header and new reference
+                result_lines.append(f"{pfx} === CONTENT IS OUT OF DATE ===")
+                result_lines.append(f"{pfx} === CONTENT END ===")
+                break
 
-                    # Add the header and new reference
-                    result_lines.append(header)
-                    result_lines.append(f"{pfx} === CONTENT IS OUT OF DATE ===")
-                    # Insert the folded (or original) content
-                    if folded_content:
-                        result_lines.append(folded_content)
-                    result_lines.append(f"{pfx} === CONTENT END ===")
-                    continue
+            if lines[i].startswith(pfx):
+                result_lines.append(lines[i])
+                i += 1
+                continue
 
-            result_lines.append(line)
-            i += 1
+            file_line_num += 1
+            fold = self._get_fold_at_line(path, file_line_num)
+            if not fold:
+                result_lines.append(lines[i])
+                i += 1
+                continue
 
+            result_lines.append(
+                f"{self.prefix} FOLD: {fold.name} (lines {fold.start_line}..{fold.end_line})"
+            )
+            i += fold.end_line - fold.start_line + 1
         return "\n".join(result_lines).rstrip()
+
+    def _get_fold_at_line(self, path: str, line: int) -> Optional[Fold]:
+        if not (folds := self._folds.get(path)):
+            return None
+
+        for entry in folds:
+            if entry.start_line == line:
+                return entry
+
+        return None
 
     def _extract_id(self, text: str) -> int | None:
         """Extract CTX number from text like 'CTX(123)'."""
@@ -216,7 +211,7 @@ class SuffixHandler(ContextHandler):
         if path not in SUFFIX_CONTEXTS:
             return {"error": f"File {path} not loaded into context"}
 
-        ctx = SUFFIX_CONTEXTS[path]
+        ctx: ContextEntry = SUFFIX_CONTEXTS[path]
         text = ctx.text
         lines = text.splitlines()
 
@@ -250,13 +245,12 @@ class SuffixHandler(ContextHandler):
                 "error": f"fold_to_line '{fold_to_line}' does not match actual line {fold_to_line_num}: '{actual_to_line}'"
             }
 
-        # Check for duplicate fold name in this file
         if path not in self._folds:
             self._folds[path] = []
 
-        for fold in self._folds[path]:
-            if fold.name == name:
-                return {"error": f"Fold with name '{name}' already exists in {path}"}
+        # Check for duplicate fold name in this file
+        if any(fold.name == name for fold in self._folds[path]):
+            return {"error": f"Fold with name '{name}' already exists in {path}"}
 
         # Check for overlap with existing folds
         overlap_result = self._check_fold_overlap(
@@ -273,15 +267,7 @@ class SuffixHandler(ContextHandler):
         )
         self._folds[path].append(fold)
 
-        # Return success message with fold info
-        pfx = self.prefix
-        ContextEntry.last_id += 1
-        new_id = f"CTX({ContextEntry.last_id})"
-        return (
-            f"{pfx} ID: {new_id} OPERATION: add_fold CTX-IO-FILE:  {path}\n"
-            f"{pfx} OK: Added fold '{name}' at lines {fold_from_line_num}..{fold_to_line_num}\n"
-            f"{pfx} === FOLD: {name} (lines {fold_from_line_num}..{fold_to_line_num}) ===\n"
-        )
+        return config.real_path(path).read_text()
 
     def _check_fold_overlap(
         self, path: str, start_line: int, end_line: int
@@ -299,17 +285,6 @@ class SuffixHandler(ContextHandler):
         existing_folds = self._folds.get(path, [])
 
         for fold in existing_folds:
-            # Check for overlap: folds must have at least one line buffer between them
-            # New fold: [start_line, end_line]
-            # Existing fold: [fold.start_line, fold.end_line]
-            # Buffer required: at least one line between folds
-
-            # Check if new fold overlaps with existing fold
-            # Overlap occurs if:
-            # - New fold starts before existing fold ends + 1 (buffer)
-            # - New fold ends after existing fold starts - 1 (buffer)
-
-            # New fold would overlap if it touches or intersects existing fold
             if not (end_line < fold.start_line - 1 or start_line > fold.end_line + 1):
                 return {
                     "error": f"New fold (lines {start_line}..{end_line}) would overlap with existing fold '{fold.name}' (lines {fold.start_line}..{fold.end_line}). At least one line buffer required between folds."
@@ -371,45 +346,6 @@ class SuffixHandler(ContextHandler):
     def has_folds(self, path: str) -> bool:
         """Check if a file has any folds."""
         return path in self._folds and len(self._folds[path]) > 0
-
-    def format_folded_content(self, path: str, text: str) -> str:
-        """Format file content with folds applied.
-
-        Args:
-            path: File path
-            text: Original file content
-
-        Returns:
-            Formatted content with fold markers replacing hidden sections
-        """
-        lines = text.splitlines()
-        result_lines: list[str] = []
-        folds = self._folds.get(path, [])
-
-        # Sort folds by start_line for proper ordering
-        sorted_folds = sorted(folds, key=lambda f: f.start_line)
-
-        line_idx = 0
-        for fold in sorted_folds:
-            # Add lines before this fold
-            while line_idx < fold.start_line - 1 and line_idx < len(lines):
-                result_lines.append(lines[line_idx])
-                line_idx += 1
-
-            # Add fold marker instead of hidden content
-            result_lines.append(
-                f"{self.prefix} FOLD: {fold.name} (lines {fold.start_line}..{fold.end_line})"
-            )
-
-            # Move to line after the fold ends
-            line_idx = fold.end_line
-
-        # Add remaining lines after all folds
-        while line_idx < len(lines):
-            result_lines.append(lines[line_idx])
-            line_idx += 1
-
-        return "\n".join(result_lines)
 
     def get_visible_lines(self, path: str) -> list[int]:
         """Get all visible (non-folded) line numbers for a file.

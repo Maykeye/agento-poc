@@ -354,6 +354,8 @@ class ToolEditDiffPatch(Tool):
         path: Annotated[str, "Project path to edit"],
         patch: Annotated[str, "Patch content in unified diff format"],
     ):
+        if not patch.endswith("\n"):
+            patch += "\n"
         p = real_path(path)
 
         if p in READ_ONLY_FILES:

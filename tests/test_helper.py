@@ -5,7 +5,7 @@ import json
 
 import config
 import tool_io
-from context import context_handler
+from context import context, context_handler, ContextMode
 from llm import LLM, LlmInstace, ToolCall
 from typing import Any, Callable, Optional
 
@@ -26,6 +26,7 @@ class TestBase(unittest.TestCase):
         return dummy_llm, msgs
 
     def setUp(self):
+        context.set_context_mode(ContextMode.RAW)
         os.chdir(tmpfilename(""))
         self.tearDown()
         config.set_project_directory(tmpfilename(""), silent=True)
@@ -129,7 +130,12 @@ class TestBase(unittest.TestCase):
             ).llm_func_call_info()
         )
         res = tool_io.ToolFoldAdd()(
-            path.name, fold_from_line_num, fold_from_line, fold_to_line_num, fold_to_line, name
+            path.name,
+            fold_from_line_num,
+            fold_from_line,
+            fold_to_line_num,
+            fold_to_line,
+            name,
         )
         return self.append_tool_call_result("file_add_fold", msgs, res)
 

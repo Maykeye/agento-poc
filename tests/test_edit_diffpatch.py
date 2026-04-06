@@ -1,7 +1,12 @@
-import unittest
-import tool_io
 from context import context_handler
+from context import set_context_mode, ContextMode
+from context import set_context_mode, ContextMode
+from llm import LLM
+from llm import LLM, LlmInstace
+from pathlib import Path
 from tests.test_helper import TestBase, tmpfilename
+import tool_io
+import unittest
 
 
 class TestDiffPatch(TestBase):
@@ -13,44 +18,19 @@ class TestDiffPatch(TestBase):
         self.llm, _ = self.init_llm_msgs()
         context_handler().prepare_current_llm(self.llm)
 
+    def tool_call_patch(self, path: str, patch: str):
+        llm = LLM.INSTANCES[-1].llm
+        msgs = LLM.INSTANCES[-1].messages
+        msgs.append(llm.msg_assistant(f"Patch {path}"))
+        result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
+        self.append_tool_call_result("edit_diff_patch", msgs, result)
+        return result
+
     def get_error_message(self, result) -> str:
         """Helper to extract error message from tool result."""
         if isinstance(result, dict):
             return result.get("error", "")
         return str(result)
-
-    def normalize_patch(self, patch: str) -> str:
-        """Normalize a patch by stripping trailing whitespace but keep newlines."""
-        # Split lines but preserve trailing whitespace on deletion lines for matching
-        raw_lines = patch.splitlines()
-        lines = []
-        for line in raw_lines:
-            if line.startswith("-"):
-                # Keep deletion lines as-is (preserve trailing whitespace for matching)
-                lines.append(line)
-            else:
-                # Strip trailing whitespace from other lines
-                lines.append(line.rstrip())
-
-        # Add leading space to context lines (lines that don't start with -, +, or are headers)
-        normalized_lines = []
-        for line in lines:
-            if line.startswith("--- ") or line.startswith("+++ "):
-                # Header lines - keep as is
-                normalized_lines.append(line)
-            elif line.startswith("@@"):
-                # Hunk header - keep as is
-                normalized_lines.append(line)
-            elif line.startswith("-") or line.startswith("+"):
-                # Change lines (- for deletion, + for addition) - keep as is
-                normalized_lines.append(line)
-            else:
-                # Context line - must start with space in unified diff format
-                if line and not line.startswith(" "):
-                    line = " " + line
-                normalized_lines.append(line)
-
-        return "\n".join(normalized_lines) + "\n"
 
     def test_edit_diff_patch_success(self):
         """Test successful patch application."""
@@ -62,11 +42,8 @@ class TestDiffPatch(TestBase):
 @@ -1,2 +1,2 @@
  foo
 -text
-+modified
-"""
++modified"""
         # Normalize the patch to ensure proper unified diff format
-        patch = self.normalize_patch(patch)
-
         result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
 
         self.assertIn("PATCH APPLIED", result)
@@ -82,10 +59,10 @@ class TestDiffPatch(TestBase):
         empty_file.write_text("")
 
         try:
-            patch = self.normalize_patch(f"""--- a/{empty_file.name}
+            patch = f"""--- a/{empty_file.name}
 +++ b/{empty_file.name}
 @@ -0,0 +1 @@
-+new content""")
++new content"""
             result = tool_io.ToolEditDiffPatch()(empty_file.name, patch)
 
             self.assertIn("PATCH APPLIED", result)
@@ -132,7 +109,7 @@ class TestDiffPatch(TestBase):
     def test_edit_diff_patch_multiple_files(self):
         """Test patch validation - multiple files in patch."""
         # Create a patch that appears to have two files
-        invalid_patch = self.normalize_patch(f"""--- a/{self.FILE_FOO.name}
+        invalid_patch = f"""--- a/{self.FILE_FOO.name}
 +++ b/{self.FILE_FOO.name}
 @@ -1,2 +1,2 @@
 -foo
@@ -141,7 +118,7 @@ class TestDiffPatch(TestBase):
 +++ b/bar
 @@ -1 +1 @@
 -bar
-+baz""")
++baz"""
 
         result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, invalid_patch)
 
@@ -152,11 +129,11 @@ class TestDiffPatch(TestBase):
     def test_edit_diff_patch_path_mismatch(self):
         """Test patch validation - path mismatch between patch and requested file."""
         # Create a patch for a different file
-        patch = self.normalize_patch(f"""--- a/different_file.txt
+        patch = f"""--- a/different_file.txt
 +++ b/different_file.txt
 @@ -1,2 +1,2 @@
 -bar
-+modified""")
++modified"""
 
         result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
 
@@ -191,7 +168,7 @@ class TestDiffPatch(TestBase):
         self.FILE_FOO.write_text(original)
 
         # Patch changes line2 to "modified line2", with context lines around it
-        patch = self.normalize_patch(f"""--- a/{self.FILE_FOO.name}
+        patch = f"""--- a/{self.FILE_FOO.name}
 +++ b/{self.FILE_FOO.name}
 @@ -1,5 +1,5 @@
  line1
@@ -199,7 +176,7 @@ class TestDiffPatch(TestBase):
 +modified line2
  line3
  line4
- line5""")
+ line5"""
 
         result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
 
@@ -213,12 +190,12 @@ class TestDiffPatch(TestBase):
         original = "keep this\nremove this\nkeep also"
         self.FILE_FOO.write_text(original)
 
-        patch = self.normalize_patch(f"""--- a/{self.FILE_FOO.name}
+        patch = f"""--- a/{self.FILE_FOO.name}
 +++ b/{self.FILE_FOO.name}
 @@ -1,3 +1,2 @@
  keep this
 -remove this
- keep also""")
+ keep also"""
 
         result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
 
@@ -230,12 +207,12 @@ class TestDiffPatch(TestBase):
         original = "line1\nline3"
         self.FILE_FOO.write_text(original)
 
-        patch = self.normalize_patch(f"""--- a/{self.FILE_FOO.name}
+        patch = f"""--- a/{self.FILE_FOO.name}
 +++ b/{self.FILE_FOO.name}
 @@ -1,2 +1,3 @@
  line1
 +inserted line
- line3""")
+ line3"""
 
         result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
 
@@ -249,7 +226,7 @@ class TestDiffPatch(TestBase):
         self.FILE_FOO.write_text(original)
 
         new_content = "FIRST\nSECOND\nTHIRD\n"
-        patch = self.normalize_patch(f"""--- a/{self.FILE_FOO.name}
+        patch = f"""--- a/{self.FILE_FOO.name}
 +++ b/{self.FILE_FOO.name}
 @@ -1,3 +1,3 @@
 -first
@@ -257,7 +234,7 @@ class TestDiffPatch(TestBase):
 -second
 +SECOND
 -third
-+THIRD""")
++THIRD"""
 
         result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
 
@@ -272,11 +249,11 @@ class TestDiffPatch(TestBase):
 
         # Create a patch with a trivial change that results in the same content
         # (delete and add the same line)
-        patch = self.normalize_patch(f"""--- a/{self.FILE_FOO.name}
+        patch = f"""--- a/{self.FILE_FOO.name}
 +++ b/{self.FILE_FOO.name}
 @@ -1 +1 @@
 -same content
-+same content""")
++same content"""
 
         result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
 
@@ -291,11 +268,11 @@ class TestDiffPatch(TestBase):
         self.FILE_FOO.write_text(original)
 
         # This patch tries to delete line 5 which doesn't exist
-        bad_patch = self.normalize_patch(f"""--- a/{self.FILE_FOO.name}
+        bad_patch = f"""--- a/{self.FILE_FOO.name}
 +++ b/{self.FILE_FOO.name}
 @@ -1,10 +1,10 @@
 -incorrect match
-+correct match""")
++correct match"""
 
         result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, bad_patch)
 
@@ -311,13 +288,13 @@ class TestDiffPatch(TestBase):
         self.FILE_FOO.write_text(original)
 
         new_content = "no spaces\nno tabs\n"
-        patch = self.normalize_patch(f"""--- a/{self.FILE_FOO.name}
+        patch = f"""--- a/{self.FILE_FOO.name}
 +++ b/{self.FILE_FOO.name}
 @@ -1,2 +1,2 @@
 -  spaces  
 +no spaces
 -\ttabs\t
-+no tabs""")
++no tabs"""
 
         result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
 
@@ -326,68 +303,152 @@ class TestDiffPatch(TestBase):
 
     def test_edit_diff_patch_prefix_context(self):
         """Test patch application in PREFIX context mode."""
-        from context import set_context_mode, ContextMode
 
-        # Save original mode and set to PREFIX
-        original_handler = context_handler()
-        set_context_mode(ContextMode.PREFIX, reset_ctx_id=True)
+        # Ensure file has trailing newline for patch to work
+        self.FILE_FOO.write_text("foo\ntext\n")
 
-        try:
-            # Ensure file has trailing newline for patch to work
-            self.FILE_FOO.write_text("foo\ntext\n")
-
-            patch = self.normalize_patch(f"""--- a/{self.FILE_FOO.name}
+        patch = f"""--- a/{self.FILE_FOO.name}
 +++ b/{self.FILE_FOO.name}
 @@ -1,2 +1,2 @@
  foo
 -text
 +modified
-""")
-
-            result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
-
-            # Verify the result contains PATCH APPLIED
-            self.assertIn("PATCH APPLIED", result)
-            self.assertIn("edit_diff_patch", result)
-
-            # Verify the file was actually modified
-            self.assertEqual(self.FILE_FOO.read_text(), "foo\nmodified\n")
-        finally:
-            # Restore original handler
-            set_context_mode(original_handler.mode(), reset_ctx_id=False)
+"""
+        result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
+        self.assertIn("PATCH APPLIED", result)
+        self.assertIn("edit_diff_patch", result)
+        self.assertEqual(self.FILE_FOO.read_text(), "foo\nmodified\n")
 
     def test_edit_diff_patch_suffix_context(self):
         """Test patch application in SUFFIX context mode."""
-        from context import set_context_mode, ContextMode
+
+        set_context_mode(ContextMode.SUFFIX, reset_ctx_id=True)
+
+        # Ensure file has trailing newline for patch to work
+        self.FILE_FOO.write_text("foo\ntext\n")
+
+        patch = f"""--- a/{self.FILE_FOO.name}
++++ b/{self.FILE_FOO.name}
+@@ -1,2 +1,2 @@
+ foo
+-text
++modified
+"""
+
+        result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
+
+        # Verify the result contains PATCH APPLIED in the tool response
+        # and the SUFFIX context markers
+        self.assertIn("PATCH APPLIED", result)
+        self.assertIn("edit_diff_patch", result)
+
+        # Verify the file was actually modified
+        self.assertEqual(self.FILE_FOO.read_text(), "foo\nmodified\n")
+
+    def test_edit_diff_patch_suffix_three_patches(self):
+        """Test applying three patches in SUFFIX mode and verify context handling.
+
+        This test creates a dummy file with 20 lines, applies three patches sequentially,
+        and verifies that:
+        1. The last patch (CTX(2)) contains the full file content
+        2. The first two patches (CTX(0) and CTX(1)) are marked as out-of-date
+        """
 
         # Save original mode and set to SUFFIX
         original_handler = context_handler()
         set_context_mode(ContextMode.SUFFIX, reset_ctx_id=True)
 
-        try:
-            # Ensure file has trailing newline for patch to work
-            self.FILE_FOO.write_text("foo\ntext\n")
+        # Create dummy file with 20 lines
+        dummy_content = "\n".join([f"line{i}" for i in range(1, 21)]) + "\n"
+        self.FILE_FOO.write_text(dummy_content)
 
-            patch = self.normalize_patch(f"""--- a/{self.FILE_FOO.name}
+        # Initialize LLM properly using the same pattern as test_context_suffix
+        dummy_llm = LLM()
+        dummy_llm.INSTANCES.append(LlmInstace(dummy_llm, []))
+        msgs = dummy_llm.INSTANCES[-1].messages
+        msgs.append(dummy_llm.msg_user("Please apply three patches to the file"))
+        context_handler().prepare_current_llm(dummy_llm)
+
+        # First patch: Change line1 to "LINE1"
+        patch1 = f"""--- a/{self.FILE_FOO.name}
 +++ b/{self.FILE_FOO.name}
-@@ -1,2 +1,2 @@
- foo
--text
-+modified
-""")
+@@ -1,5 +1,5 @@
+-line1
++LINE1
+ line2
+ line3
+ line4
+ line5"""
 
-            result = tool_io.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
+        msgs.append(dummy_llm.msg_assistant("Applying first patch"))
+        result1 = self.tool_call_patch(self.FILE_FOO.name, patch1)
+        result1_idx = len(msgs) - 1
+        self.assertIn("PATCH APPLIED", result1)
+        self.assertIn("CTX(0)", result1)
 
-            # Verify the result contains PATCH APPLIED in the tool response
-            # and the SUFFIX context markers
-            self.assertIn("PATCH APPLIED", result)
-            self.assertIn("edit_diff_patch", result)
+        # Second patch: Change line10 to "LINE10"
+        patch2 = f"""--- a/{self.FILE_FOO.name}
++++ b/{self.FILE_FOO.name}
+@@ -8,7 +8,7 @@
+ line8
+ line9
+-line10
++LINE10
+ line11
+ line12
+ line13"""
+        result2 = self.tool_call_patch(self.FILE_FOO.name, patch2)
+        result2_idx = len(msgs) - 1
+        self.assertIn("PATCH APPLIED", result2)
+        self.assertIn("CTX(1)", result2)
+        self.epilogue()
 
-            # Verify the file was actually modified
-            self.assertEqual(self.FILE_FOO.read_text(), "foo\nmodified\n")
-        finally:
-            # Restore original handler
-            set_context_mode(original_handler.mode(), reset_ctx_id=False)
+        # Patch1: gone
+        self.assertEqual(msgs[result1_idx].get("role"), "tool")
+        content = msgs[result1_idx]["content"]
+        self.assertIn("ID: CTX(0)", content)
+        self.assertNotIn("CTX(1)", content)
+        self.assertIn("OUT OF DATE", content)
+        self.assertNotIn("line", content)
+
+        # Third patch: Change line20 to "LINE20"
+        patch3 = f"""--- a/{self.FILE_FOO.name}
++++ b/{self.FILE_FOO.name}
+@@ -17,4 +17,4 @@
+ line17
+ line18
+ line19
+-line20
++LINE20"""
+        # Patch1: still gone
+        self.assertEqual(msgs[result1_idx].get("role"), "tool")
+        content = msgs[result1_idx]["content"]
+        self.assertIn("ID: CTX(0)", content)
+        self.assertIn("OUT OF DATE", content)
+        self.assertNotIn("line", content)
+
+        result3 = self.tool_call_patch(self.FILE_FOO.name, patch3)
+        result3_idx = len(msgs) - 1
+        self.epilogue()
+        self.assertIn("PATCH APPLIED", result3)
+        self.assertIn("CTX(2)", result3)
+
+        # Patch2: gone
+        self.assertEqual(msgs[result2_idx].get("role"), "tool")
+        content = msgs[result2_idx]["content"]
+        self.assertIn("ID: CTX(1)", content)
+        self.assertIn("OUT OF DATE", content)
+        self.assertNotIn("line", content)
+
+        # Patch3: Up to date
+        self.assertEqual(msgs[result3_idx].get("role"), "tool")
+        content = msgs[result3_idx]["content"]
+        self.assertNotIn("line1\n", content)
+        self.assertNotIn("line10", content)
+        self.assertNotIn("line20", content)
+        self.assertIn("LINE1\n", content)
+        self.assertIn("LINE10", content)
+        self.assertIn("LINE20", content)
 
 
 if __name__ == "__main__":
