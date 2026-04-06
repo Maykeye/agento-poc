@@ -16,6 +16,7 @@ class SuffixHandler(ContextHandler):
         self._prefix: str = ">>>"
         # Track folds per file: {path: [Fold, ...]}
         self._folds: dict[str, list[Fold]] = {}
+        SUFFIX_CONTEXTS.clear()
 
     @property
     def prefix(self) -> str:
@@ -502,3 +503,40 @@ class SuffixHandler(ContextHandler):
             )
 
         return (True, "")
+
+    def visible_to_actual(self, path: str, visible_line: int, text: str) -> int:
+        """Convert visible line number to actual file line number.
+
+        This method handles fold markers by jumping over folded regions.
+        Uses the current prefix setting to detect fold markers.
+
+        Args:
+            path: File path
+            visible_line: Line number in visible (folded) content (1-indexed)
+            text: Full original file content
+
+        Returns:
+            Actual line number in the original file (1-indexed)
+        """
+        import re
+
+        # Get visible content (with folds applied)
+        visible_text = self.format_folded_content(path, text)
+        visible_lines = visible_text.splitlines()
+
+        actual_line = 0
+        pfx = self.prefix
+
+        for i, vline in enumerate(visible_lines):
+            actual_line += 1
+            # Check if this is a fold marker (using current prefix)
+            fold_marker = f"{pfx} >> FOLD:"
+            if vline.startswith(fold_marker):
+                if match := re.search(r"FOLD: lines \d+\.\.(\d+)", vline):
+                    # This visible line represents a fold, jump to end line
+                    actual_line = int(match.group(1))
+
+            if i + 1 == visible_line:
+                return actual_line
+
+        return actual_line

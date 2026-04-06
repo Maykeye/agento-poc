@@ -278,11 +278,11 @@ class ToolEditFile(Tool):
         )
 
 
-class ToolFoldAdd(Tool):
+class ToolFoldAddImpl(Tool):
     def __init__(self):
         super().__init__(
-            "file_add_fold",
-            "Add a fold to hide file content in the LLM context. Specify line numbers to fold a range of lines. The line text arguments help validate correct line counting. When lines are folded, `FOLD: lines N..M (description)` will be displayed where N and M are real line numbers. Use them for counting further folding.",
+            "file_add_fold_impl",
+            "INTERNAL: Add a fold using line numbers (implementation class). Use ToolFoldAdd for regex-based folding instead.",
         )
 
     def __call__(
@@ -307,6 +307,151 @@ class ToolFoldAdd(Tool):
             fold_to_line_num,
             fold_to_line,
             name,
+        )
+
+
+class ToolFoldAdd(Tool):
+    def __init__(self):
+        super().__init__(
+            "file_add_fold",
+            """Add a fold to hide file content in the LLM context using regex patterns.
+
+SPECIFICATION:
+- Use regex patterns to identify the start and end of the region to fold.
+- Multiline patterns are supported and encouraged for more reliable matching.
+- The start pattern must match exactly once in the VISIBLE (non-folded) content.
+- The end pattern must match exactly once AFTER the start pattern match.
+- The fold region (start..end) must not overlap with existing folds.
+
+LINE NUMBER RULES:
+- If the start pattern matches multiple lines, the fold starts from the FIRST matching line.
+- If the end pattern matches multiple lines, the fold ends at the LAST matching line.
+
+EXAMPLES:
+1. Single line patterns:
+   start_pattern="def my_function\\(", end_pattern="^    pass$"
+
+2. Multiline patterns (recommended for reliability):
+   start_pattern="def my_function\\([^)]*\\):\\s*\\n\\s*\"\"\"",
+   end_pattern="\"\"\"\\s*\\n\\n"
+
+When lines are folded, `FOLD: lines N..M (description)` will be displayed where N and M are real line numbers. Use them for counting further folding.""",
+        )
+
+    def __call__(
+        self,
+        path: Annotated[str, "Project path to add fold to"],
+        start_pattern: Annotated[
+            str,
+            "Regex pattern to match the START of the region to fold. Must match exactly once in visible content. For multiline patterns, folding starts from the first matching line.",
+        ],
+        end_pattern: Annotated[
+            str,
+            "Regex pattern to match the END of the region to fold. Must match exactly once AFTER the start. For multiline patterns, folding ends at the last matching line.",
+        ],
+        name: Annotated[str, "Unique name/description for this fold"],
+    ):
+
+        handler = context_handler()
+
+        # Check if file has been read
+        from context.suffix import SUFFIX_CONTEXTS
+
+        if path not in SUFFIX_CONTEXTS:
+            return {
+                path: "error",
+                "error": f"File {path} has not been read. Read it first with read_file.",
+            }
+
+        # Get the full file content
+        full_text = SUFFIX_CONTEXTS[path].text
+        full_lines = full_text.splitlines()
+
+        # Get visible content (with folds applied)
+        visible_text = handler.format_folded_content(path, full_text)
+
+        # Compile patterns
+        try:
+            start_re = re.compile(start_pattern, re.MULTILINE)
+        except re.error as e:
+            return {path: "error", "error": f"Invalid start_pattern regex: {e}"}
+
+        try:
+            end_re = re.compile(end_pattern, re.MULTILINE)
+        except re.error as e:
+            return {path: "error", "error": f"Invalid end_pattern regex: {e}"}
+
+        # Find start pattern in visible content
+        start_matches = list(start_re.finditer(visible_text))
+        if len(start_matches) == 0:
+            return {
+                path: "error",
+                "error": f"start_pattern `{start_pattern}` not found in visible content",
+            }
+        if len(start_matches) > 1:
+            return {
+                path: "error",
+                "error": f"start_pattern `{start_pattern}` matches {len(start_matches)} times in visible content (must match exactly once)",
+            }
+        start_match = start_matches[0]
+
+        # Find end pattern AFTER start match in visible content
+        search_after_start = visible_text[start_match.start() :]
+        end_matches = list(end_re.finditer(search_after_start))
+        if len(end_matches) == 0:
+            return {
+                path: "error",
+                "error": f"end_pattern `{end_pattern}` not found after start_pattern in visible content",
+            }
+        if len(end_matches) > 1:
+            return {
+                path: "error",
+                "error": f"end_pattern `{end_pattern}` matches {len(end_matches)} times after start (must match exactly once)",
+            }
+        end_match = end_matches[0]
+
+        # Calculate visible line numbers for start and end
+        # Start: first line of start match
+        start_visible_line = visible_text[: start_match.start()].count("\n") + 1
+
+        # End: last line of end match (in the search_after_start context)
+        # end_match.end() is relative to search_after_start
+        absolute_end_pos = start_match.start() + end_match.end()
+        end_visible_line = visible_text[:absolute_end_pos].count("\n") + 1
+
+        # Map visible line numbers to actual file line numbers using context handler
+        start_actual_line = handler.visible_to_actual(
+            path, start_visible_line, full_text
+        )
+        end_actual_line = handler.visible_to_actual(path, end_visible_line, full_text)
+
+        # Get the actual line content for validation
+        start_actual_line_idx = start_actual_line - 1
+        end_actual_line_idx = end_actual_line - 1
+
+        if start_actual_line_idx < 0 or start_actual_line_idx >= len(full_lines):
+            return {
+                path: "error",
+                "error": f"Calculated start line {start_actual_line} is out of bounds",
+            }
+        if end_actual_line_idx < 0 or end_actual_line_idx >= len(full_lines):
+            return {
+                path: "error",
+                "error": f"Calculated end line {end_actual_line} is out of bounds",
+            }
+
+        start_line_content = full_lines[start_actual_line_idx]
+        end_line_content = full_lines[end_actual_line_idx]
+
+        # Call the implementation class with computed line numbers
+        impl = ToolFoldAddImpl()
+        return impl(
+            path=path,
+            fold_from_line_num=start_actual_line,
+            fold_from_line=start_line_content,
+            fold_to_line_num=end_actual_line,
+            fold_to_line=end_line_content,
+            name=name,
         )
 
 

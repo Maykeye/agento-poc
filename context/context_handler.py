@@ -123,3 +123,20 @@ class ContextHandler(ABC):
         """
         del path
         return text.rstrip()
+
+    def visible_to_actual(self, path: str, visible_line: int, text: str) -> int:
+        """Convert visible line number to actual file line number.
+
+        Base implementation returns visible line number unchanged (no folds).
+        Override in SuffixHandler to handle fold markers.
+
+        Args:
+            path: File path
+            visible_line: Line number in visible (folded) content (1-indexed)
+            text: Full original file content
+
+        Returns:
+            Actual line number in the original file (1-indexed)
+        """
+        del (path, text)
+        return visible_line

@@ -109,7 +109,7 @@ class TestBase(unittest.TestCase):
         fold_to_line: str,
         name: str,
     ) -> Any:
-        """Call the file_add_fold tool."""
+        """Call the file_add_fold tool using the implementation class (line numbers)."""
         context_handler().prepare_current_llm(LLM.INSTANCES[-1].llm)
         self.ID += 1
         msgs = LLM.INSTANCES[-1].messages
@@ -129,12 +129,45 @@ class TestBase(unittest.TestCase):
                 id=f"id{self.ID}",
             ).llm_func_call_info()
         )
-        res = tool_io.ToolFoldAdd()(
+        res = tool_io.ToolFoldAddImpl()(
             path.name,
             fold_from_line_num,
             fold_from_line,
             fold_to_line_num,
             fold_to_line,
+            name,
+        )
+        return self.append_tool_call_result("file_add_fold", msgs, res)
+
+    def tool_call_add_fold_regex(
+        self,
+        path: Path,
+        start_pattern: str,
+        end_pattern: str,
+        name: str,
+    ) -> Any:
+        """Call the file_add_fold tool with regex patterns (new API)."""
+        context_handler().prepare_current_llm(LLM.INSTANCES[-1].llm)
+        self.ID += 1
+        msgs = LLM.INSTANCES[-1].messages
+        msgs.append(
+            ToolCall(
+                function="file_add_fold",
+                arguments=json.dumps(
+                    {
+                        "path": path.name,
+                        "start_pattern": start_pattern,
+                        "end_pattern": end_pattern,
+                        "name": name,
+                    }
+                ),
+                id=f"id{self.ID}",
+            ).llm_func_call_info()
+        )
+        res = tool_io.ToolFoldAdd()(
+            path.name,
+            start_pattern,
+            end_pattern,
             name,
         )
         return self.append_tool_call_result("file_add_fold", msgs, res)

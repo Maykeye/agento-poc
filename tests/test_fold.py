@@ -12,10 +12,6 @@ class TestFold(TestBase):
         """Set up test fixtures with SUFFIX context mode for folding."""
         super().setUp()
         context.set_context_mode(ContextMode.SUFFIX, reset_ctx_id=True)
-        # Clear SUFFIX_CONTEXTS to ensure clean state for each test
-        from context.suffix import SUFFIX_CONTEXTS
-
-        SUFFIX_CONTEXTS.clear()
 
     def test_add_fold_basic(self):
         """Test adding a basic fold to a file."""
