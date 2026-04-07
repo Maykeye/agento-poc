@@ -5,7 +5,7 @@ from typing import Optional
 import config
 
 
-def expand_file(prompt_file: str, used_files: Optional[set[str]] = None):
+def expand_file(prompt_file: str, used_files: Optional[set[str]] = None, done=False):
     def cmd(s: str, pfx: str):
         if s.startswith(pfx):
             return s[len(pfx) :].lstrip()
@@ -21,8 +21,13 @@ def expand_file(prompt_file: str, used_files: Optional[set[str]] = None):
     new = []
 
     for line in lines:
-        if include := cmd(line, "@read "):
-            out = expand_file(include, used_files)
+        if done:
+            new += [line]
+            continue
+        if cmd(line, "@done") is not None:
+            done = True
+        elif include := cmd(line, "@read "):
+            out = expand_file(include, used_files, done)
             new += [out]
         elif project := cmd(line, "@project_dir "):
             config.set_project_directory(Path(project).resolve())
