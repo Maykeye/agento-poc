@@ -462,6 +462,26 @@ class TestDiffPatch(TestBase):
     def test_rhs_fix(self):
         self.impl_count_fix(4, 2)
 
+    def test_empty_hunk_is_nop(self):
+        set_context_mode(ContextMode.SUFFIX)
+        self.FILE_FOO.write_text("line1\nline2\nline3\nline4")
+        self.tool_call_read(self.FILE_FOO)
+        self.tool_call_patch(
+            self.FILE_FOO.name,
+            f"""--- a/{self.FILE_FOO.name}
++++ b/{self.FILE_FOO.name}
+@@ -1,4 +1,4 @@
+ line1
+ line2
+ line3
+ line4""",
+        )
+        res_idx = len(self.messages) - 1
+        self.assertNotIn("error", self.messages[-1]["content"])
+        self.epilogue()
+        res = self.messages[res_idx]["content"]
+        self.assertIn("warning", res)
+
 
 if __name__ == "__main__":
     unittest.main()

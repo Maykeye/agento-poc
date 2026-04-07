@@ -11,6 +11,8 @@ from tool import Tool, run_executable
 
 
 class ToolEditDiffPatch(Tool):
+    SKIP_SAVING_INVALID_PATCHES = False
+
     def __init__(self):
         super().__init__(
             "edit_file_by_patch",
@@ -79,16 +81,20 @@ class ToolEditDiffPatch(Tool):
                 }
 
         # Fix hunk line counts before applying patch
-        patch = _fix_patch_hunk_counts(patch)
+        fixed_patch = _fix_patch_hunk_counts(patch)
+
+        if not fixed_patch:
+            return {"warning": "no changes were given"}
 
         # Run patch directly on the file (don't use -p, just pass the file)
         result = run_executable(
-            ["patch", "--reject-file=-", "--no-backup", "-u", str(p)], stdin_text=patch
+            ["patch", "--reject-file=-", "--no-backup", "-u", str(p)],
+            stdin_text=fixed_patch,
         )
 
         if result.get("exitcode") != 0:
-            # Save debug files when patch fails
-            _save_debug_patch_files(path, original_content, patch)
+            if not ToolEditDiffPatch.SKIP_SAVING_INVALID_PATCHES:
+                _save_debug_patch_files(path, original_content, patch)
             return {
                 path: "error",
                 "error": f"Patch failed with exit code {result.get('exitcode')}",
@@ -142,6 +148,9 @@ def _fix_patch_hunk_counts(patch: str) -> str:
     -removed line (starts with -)
     +added line (starts with +)
     """
+    # Returns: (fixed_patch, is_empty_patch)
+    # is_empty_patch is True if all hunks have no actual changes (only context lines)
+
     # Split into lines but preserve the trailing newline
     lines = patch.splitlines()
 
@@ -161,13 +170,16 @@ def _fix_patch_hunk_counts(patch: str) -> str:
         result_lines.append(lines[i])
         i += 1
 
-    # Process hunks
+    # Process hunks - track if we have any non-empty hunks
+    has_non_empty_hunk = False
+
     while i < total_lines:
         if lines[i].startswith("@@ "):
             # Parse hunk header: @@ -old_start,old_count +new_start,new_count @@
             hunk_header = lines[i]
-            result_lines.append(hunk_header)
             i += 1
+
+            has_change = False
 
             # Collect and count lines in the hunk body
             old_count = 0
@@ -183,8 +195,10 @@ def _fix_patch_hunk_counts(patch: str) -> str:
                 line = lines[i]
                 if line.startswith("-"):
                     old_count += 1
+                    has_change = True
                 elif line.startswith("+"):
                     new_count += 1
+                    has_change = True
                 elif line.startswith(" "):
                     old_count += 1
                     new_count += 1
@@ -192,19 +206,21 @@ def _fix_patch_hunk_counts(patch: str) -> str:
                 hunk_body_lines.append(line)
                 i += 1
 
-            # Fix the hunk header with correct counts
-            fixed_header = _fix_hunk_header(hunk_header, old_count, new_count)
-            # Replace the last added header with the fixed one
-            result_lines[-1] = fixed_header
+            # Only add hunk if it has actual changes (not just context lines)
+            if has_change:
+                has_non_empty_hunk = True
+                fixed_header = _fix_hunk_header(hunk_header, old_count, new_count)
+                result_lines.append(fixed_header)
+                result_lines.extend(hunk_body_lines)
 
-            # Add hunk body lines
-            result_lines.extend(hunk_body_lines)
         else:
             # Any remaining lines after last hunk
             result_lines.append(lines[i])
             i += 1
 
-    # Join back with newlines and ensure trailing newline
+    is_empty = not has_non_empty_hunk
+    if is_empty:
+        return ""
     return "\n".join(result_lines) + "\n"
 
 

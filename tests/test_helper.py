@@ -4,6 +4,7 @@ from pathlib import Path
 import json
 
 import config
+import tool_edit_patch
 import tool_io
 from context import context, context_handler, ContextMode
 from llm import LLM, LlmInstace, ToolCall
@@ -33,6 +34,7 @@ class TestBase(unittest.TestCase):
         LLM.INSTANCES.clear()
         self.FILE_FOO.write_text("foo\ntext")
         self.FILE_BAR.write_text("bar\nvalue")
+        tool_edit_patch.ToolEditDiffPatch.SKIP_SAVING_INVALID_PATCHES = True
 
     def tearDown(self):
         self.FILE_FOO.unlink(True)
