@@ -5,12 +5,15 @@ import config
 from context.context_handler import ContextMode, ContextEntry, LlmProto
 from context.fold import Fold
 from pathlib import Path
+import json
 
 SUFFIX_CONTEXTS = {}
 
 
 class SuffixHandler(ContextHandler):
     """Suffix handler that replaces old file content in messages with references to new content."""
+
+    keep_old_edits = 5
 
     def __init__(self):
         self._prefix: str = ">>>"
@@ -92,7 +95,7 @@ class SuffixHandler(ContextHandler):
         for path, entry in SUFFIX_CONTEXTS.items():
             latest_contexts[path] = entry.id
 
-        # Process each message to update old context references
+        # Process each message to prune old messages
         for msg in messages:
             if msg.get("role") != "tool":
                 continue
@@ -107,28 +110,26 @@ class SuffixHandler(ContextHandler):
             pattern = (
                 rf"({pfx}\s*ID: CTX\((\d+)\) OPERATION: (\w+) CTX-IO-FILE:\s+(\S+))"
             )
-            matches = list(re.finditer(pattern, content))
 
-            if not matches:
+            if not (matches := list(re.finditer(pattern, content))):
                 continue
 
-            # Process each context entry found in this message
+            # Process each context entry found in this message to mark outdated one
             for match in reversed(matches):
                 ctx_id_num = int(match.group(2))
                 path = match.group(4)
 
                 ctx_id = f"CTX({ctx_id_num})"
 
-                # Check if this context is outdated
-                if path in latest_contexts:
-                    latest_id = latest_contexts[path]
-                    if ctx_id != latest_id:
-                        # This is an outdated context - replace with reference
-                        new_content = self._replace_outdated_context(
-                            content, ctx_id, path
-                        )
-                        msg["content"] = new_content
-                        content = new_content  # Update for subsequent replacements
+                if path not in latest_contexts:
+                    continue
+                latest_id = latest_contexts[path]
+                if ctx_id != latest_id:
+                    new_content = self._replace_outdated_context(content, ctx_id, path)
+                    msg["content"] = new_content
+
+        # Aggressive pruning of tool calls for editing operations
+        self._prune_old_tool_calls(messages, list(latest_contexts.keys()))
 
     def _replace_outdated_context(
         self, content: str, old_ctx_id: str, path: str
@@ -187,6 +188,66 @@ class SuffixHandler(ContextHandler):
         )
 
         return content.replace(old_block, new_block, 1)
+
+    def _prune_old_tool_calls(self, messages: list[dict], our_paths: list[str]):
+        """Aggressively prune old tool calls that edit files."""
+        editing_tools = {
+            "edit_file",
+            "write_file",
+            "delete_file",
+            "edit_diff_patch",
+            "file_add_fold",
+            "file_unfold",
+        }
+
+        # Track edits per path
+        edit_counts: dict[str, int] = {}
+
+        # Iterate messages backwards
+        for msg_idx in range(len(messages) - 1, -1, -1):
+            msg = messages[msg_idx]
+
+            # Skip non-assistant messages
+            if msg.get("role") != "assistant":
+                continue
+
+            # Skip messages without tool calls
+            tool_calls = msg.get("tool_calls", [])
+            if not tool_calls:
+                continue
+
+            # Iterate tool calls in reverse order
+            for tc_idx in range(len(tool_calls) - 1, -1, -1):
+                tool_call = tool_calls[tc_idx]
+
+                # Get function info
+                func_info = tool_call.get("function", {})
+                func_name = func_info.get("name", "")
+
+                # Skip non-editing tools
+                if func_name not in editing_tools:
+                    continue
+
+                # Decode arguments
+                try:
+                    args = json.loads(func_info.get("arguments", "{}"))
+                except (json.JSONDecodeError, TypeError):
+                    continue
+
+                # Skip if not our path
+                if (call_path := args.get("path", "")) not in our_paths:
+                    continue
+
+                # Track this edit
+                if call_path not in edit_counts:
+                    edit_counts[call_path] = 0
+                edit_counts[call_path] += 1
+
+                # Check if we should prune this edit
+                if edit_counts[call_path] > self.keep_old_edits:
+                    # Prune this tool call by replacing arguments
+                    new_args = {"path": call_path, "cleanup": "the call is removed"}
+                    func_info["arguments"] = json.dumps(new_args)
 
     def _format_fold_result(
         self, path: str, folded_text: str, oper: str, fold_info: str

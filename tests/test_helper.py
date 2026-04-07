@@ -43,11 +43,16 @@ class TestBase(unittest.TestCase):
         self.ID += 1
         msgs = LLM.INSTANCES[-1].messages
         msgs.append(
-            ToolCall(
-                function="read_file",
-                arguments=json.dumps({"path": path.name}),
-                id=f"id{self.ID}",
-            ).llm_func_call_info()
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    ToolCall(
+                        function="read_file",
+                        arguments=json.dumps({"path": path.name}),
+                        id=f"id{self.ID}",
+                    ).llm_func_call_info()
+                ],
+            }
         )
         res = tool_io.ToolReadFile()(path.name)
         return self.append_tool_call_result("read_file", msgs, res)
@@ -57,11 +62,16 @@ class TestBase(unittest.TestCase):
         self.ID += 1
         msgs = LLM.INSTANCES[-1].messages
         msgs.append(
-            ToolCall(
-                function="write_file",
-                arguments=json.dumps({"path": path.name, "text": text}),
-                id=f"id{self.ID}",
-            ).llm_func_call_info()
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    ToolCall(
+                        function="write_file",
+                        arguments=json.dumps({"path": path.name, "text": text}),
+                        id=f"id{self.ID}",
+                    ).llm_func_call_info()
+                ],
+            }
         )
         res = tool_io.ToolWriteFile()(path.name, text)
         return self.append_tool_call_result("read_file", msgs, res)
@@ -71,11 +81,16 @@ class TestBase(unittest.TestCase):
         self.ID += 1
         msgs = LLM.INSTANCES[-1].messages
         msgs.append(
-            ToolCall(
-                function="delete_file",
-                arguments=json.dumps({"path": self.FILE_FOO.name}),
-                id=f"id{self.ID}",
-            ).llm_func_call_info()
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    ToolCall(
+                        function="delete_file",
+                        arguments=json.dumps({"path": self.FILE_FOO.name}),
+                        id=f"id{self.ID}",
+                    ).llm_func_call_info()
+                ],
+            }
         )
         res = tool_io.ToolDeleteFile()(self.FILE_FOO.name)
         return self.append_tool_call_result("delete_file", msgs, res)
@@ -85,17 +100,22 @@ class TestBase(unittest.TestCase):
         self.ID += 1
         msgs = LLM.INSTANCES[-1].messages
         msgs.append(
-            ToolCall(
-                function="edit_file",
-                arguments=json.dumps(
-                    {
-                        "path": self.FILE_FOO.name,
-                        "replace_from": replace_from,
-                        "replace_with": replace_with,
-                    }
-                ),
-                id=f"id{self.ID}",
-            ).llm_func_call_info()
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    ToolCall(
+                        function="edit_file",
+                        arguments=json.dumps(
+                            {
+                                "path": self.FILE_FOO.name,
+                                "replace_from": replace_from,
+                                "replace_with": replace_with,
+                            }
+                        ),
+                        id=f"id{self.ID}",
+                    ).llm_func_call_info()
+                ],
+            }
         )
         res = tool_io.ToolEditFile()(self.FILE_FOO.name, replace_from, replace_with)
         return self.append_tool_call_result("edit_file", msgs, res)
@@ -114,20 +134,25 @@ class TestBase(unittest.TestCase):
         self.ID += 1
         msgs = LLM.INSTANCES[-1].messages
         msgs.append(
-            ToolCall(
-                function="file_add_fold",
-                arguments=json.dumps(
-                    {
-                        "path": path.name,
-                        "fold_from_line_num": fold_from_line_num,
-                        "fold_from_line": fold_from_line,
-                        "fold_to_line_num": fold_to_line_num,
-                        "fold_to_line": fold_to_line,
-                        "name": name,
-                    }
-                ),
-                id=f"id{self.ID}",
-            ).llm_func_call_info()
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    ToolCall(
+                        function="file_add_fold",
+                        arguments=json.dumps(
+                            {
+                                "path": path.name,
+                                "fold_from_line_num": fold_from_line_num,
+                                "fold_from_line": fold_from_line,
+                                "fold_to_line_num": fold_to_line_num,
+                                "fold_to_line": fold_to_line,
+                                "name": name,
+                            }
+                        ),
+                        id=f"id{self.ID}",
+                    ).llm_func_call_info()
+                ],
+            }
         )
         res = tool_io.ToolFoldAddImpl()(
             path.name,
@@ -151,18 +176,23 @@ class TestBase(unittest.TestCase):
         self.ID += 1
         msgs = LLM.INSTANCES[-1].messages
         msgs.append(
-            ToolCall(
-                function="file_add_fold",
-                arguments=json.dumps(
-                    {
-                        "path": path.name,
-                        "start_pattern": start_pattern,
-                        "end_pattern": end_pattern,
-                        "name": name,
-                    }
-                ),
-                id=f"id{self.ID}",
-            ).llm_func_call_info()
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    ToolCall(
+                        function="file_add_fold",
+                        arguments=json.dumps(
+                            {
+                                "path": path.name,
+                                "start_pattern": start_pattern,
+                                "end_pattern": end_pattern,
+                                "name": name,
+                            }
+                        ),
+                        id=f"id{self.ID}",
+                    ).llm_func_call_info()
+                ],
+            }
         )
         res = tool_io.ToolFoldAdd()(
             path.name,
@@ -179,11 +209,16 @@ class TestBase(unittest.TestCase):
         self.ID += 1
         msgs = LLM.INSTANCES[-1].messages
         msgs.append(
-            ToolCall(
-                function="file_unfold",
-                arguments=json.dumps({"path": path.name, "name": name}),
-                id=f"id{self.ID}",
-            ).llm_func_call_info()
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    ToolCall(
+                        function="file_unfold",
+                        arguments=json.dumps({"path": path.name, "name": name}),
+                        id=f"id{self.ID}",
+                    ).llm_func_call_info()
+                ],
+            }
         )
         res = tool_io.ToolUnfold()(path.name, name)
         return self.append_tool_call_result("file_unfold", msgs, res)
@@ -195,11 +230,16 @@ class TestBase(unittest.TestCase):
         self.ID += 1
         msgs = LLM.INSTANCES[-1].messages
         msgs.append(
-            ToolCall(
-                function="file_unfold_all",
-                arguments=json.dumps({"path": path.name}),
-                id=f"id{self.ID}",
-            ).llm_func_call_info()
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    ToolCall(
+                        function="file_unfold_all",
+                        arguments=json.dumps({"path": path.name}),
+                        id=f"id{self.ID}",
+                    ).llm_func_call_info()
+                ],
+            }
         )
         res = tool_io.ToolUnfoldAll()(path.name)
         return self.append_tool_call_result("file_unfold_all", msgs, res)
