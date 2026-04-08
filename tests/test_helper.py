@@ -34,7 +34,6 @@ class TestBase(unittest.TestCase):
         Path(tmpfilename("")).mkdir(parents=True, exist_ok=True)
         context.set_context_mode(ContextMode.RAW)
         os.chdir(tmpfilename(""))
-        self.tearDown()
         config.set_project_directory(tmpfilename(""), silent=True)
         LLM.INSTANCES.clear()
         self.FILE_FOO.write_text("foo\ntext")
