@@ -129,17 +129,17 @@ Empty files cannot be edited - use write_file instead.""",
 You are now in EDITOR MODE for file: {path}
 
 EDITOR MODE RULES:
-1. You are working with a BUFFERED view of the file (showing {LINES} lines at a time)
+1. You are working with a buffered view of the file (showing {LINES} lines at a time)
 2. Line numbers are 1-indexed and displayed as 5-digit numbers (e.g., 00001, 00123)
 3. The buffer shows lines starting from your current line position
 4. You can navigate using: goto <line>, find_prev/find_next <pattern>
-5. You can edit using: patch_current_file (PREFERRED), edit_file (for single replacements)
+5. You can edit using: patch_current_file (preferred), edit_file (for single replacements)
 6. You can switch files using: edit_file <path>
-7. When done, use: write text (to save) or finish_editing(report) to quit
-8. All tools except read and write work ONLY on the current buffer view
+7. When done, use finish_editing(report) to quit editing
+8. All tools except read work only on the current buffer view
 9. The current file path is: {path}
 
-PREFERRED APPROACH: Use patch_current_file for edits. It's more reliable and allows multiple changes.
+PREFERRED APPROACH: Use patch_current_file for edits.
 
 Current buffer (starting from line 1):"""
                 + "\n"
@@ -919,6 +919,12 @@ All edit commands after read_file will apply to the file that was edited before 
     def __call__(self, path: Annotated[str, "Path to the file to read"]):
         read_tool = ToolReadFile()
         result = read_tool(path)
+        if isinstance(result, str):
+            llm = LLM.INSTANCES[-1].llm
+            llm_id = id(llm)
+            current_path = ToolEditor._editing_files[llm_id]
+            result += f"\n\nNote: still editing {current_path}"
+
         return result
 
 
