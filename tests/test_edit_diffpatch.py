@@ -14,6 +14,7 @@ class TestDiffPatch(TestBase):
         # Initialize LLM properly like other tests do
         self.llm, self.messages = self.init_llm_msgs()
         context_handler().prepare_current_llm(self.llm)
+        set_context_mode(ContextMode.SUFFIX, reset_ctx_id=True)
 
     def tool_call_patch(self, path: str, patch: str):
         llm = LLM.INSTANCES[-1].llm
@@ -308,11 +309,6 @@ class TestDiffPatch(TestBase):
         self.assertEqual(self.FILE_FOO.read_text(), "foo\nmodified\n")
 
     def test_edit_diff_patch_suffix_context(self):
-        """Test patch application in SUFFIX context mode."""
-
-        set_context_mode(ContextMode.SUFFIX, reset_ctx_id=True)
-
-        # Ensure file has trailing newline for patch to work
         self.FILE_FOO.write_text("foo\ntext\n")
 
         patch = f"""--- a/{self.FILE_FOO.name}
@@ -334,17 +330,6 @@ class TestDiffPatch(TestBase):
         self.assertEqual(self.FILE_FOO.read_text(), "foo\nmodified\n")
 
     def test_edit_diff_patch_suffix_three_patches(self):
-        """Test applying three patches in SUFFIX mode and verify context handling.
-
-        This test creates a dummy file with 20 lines, applies three patches sequentially,
-        and verifies that:
-        1. The last patch (CTX(2)) contains the full file content
-        2. The first two patches (CTX(0) and CTX(1)) are marked as out-of-date
-        """
-
-        # Save original mode and set to SUFFIX
-        set_context_mode(ContextMode.SUFFIX, reset_ctx_id=True)
-
         # Create dummy file with 20 lines
         dummy_content = "\n".join([f"line{i}" for i in range(1, 21)]) + "\n"
         self.FILE_FOO.write_text(dummy_content)
@@ -481,6 +466,41 @@ class TestDiffPatch(TestBase):
         self.epilogue()
         res = self.messages[res_idx]["content"]
         self.assertIn("warning", res)
+
+    def call_remove_line_test(self, patch_range: range, remove: int):
+        orig = "\n".join([f"LINE{i:02d}" for i in range(1, 10)]) + "\n"
+        self.FILE_FOO.write_text(orig)
+        patch = f"--- a/{self.FILE_FOO.name}\n"
+        patch += f"+++ b/{self.FILE_FOO.name}\n"
+        patch += f"@@ -{patch_range.start},5 +{patch_range.start},5 @@\n"
+        for i in patch_range:
+            pfx = "-" if i == remove else " "
+            patch += f"{pfx}LINE0{i}\n"
+        return tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
+
+    def test_edit_diff_patch_bof_visible(self):
+        result = self.call_remove_line_test(range(1, 8), 5)
+        self.assertIn("PATCH APPLIED", result)
+        expected = "\n".join(f"LINE0{n}" for n in "12346789") + "\n"
+        self.assertEqual(self.FILE_FOO.read_text(), expected)
+
+    def test_edit_diff_patch_bof_remove(self):
+        result = self.call_remove_line_test(range(1, 8), 1)
+        self.assertIn("PATCH APPLIED", result)
+        expected = "\n".join(f"LINE0{n}" for n in "23456789") + "\n"
+        self.assertEqual(self.FILE_FOO.read_text(), expected)
+
+    def test_edit_diff_patch_eof_visible(self):
+        result = self.call_remove_line_test(range(3, 10), 7)
+        self.assertIn("PATCH APPLIED", result)
+        expected = "\n".join(f"LINE0{n}" for n in "12345689") + "\n"
+        self.assertEqual(self.FILE_FOO.read_text(), expected)
+
+    def test_edit_diff_patch_eof_remove(self):
+        result = self.call_remove_line_test(range(3, 10), 9)
+        self.assertIn("PATCH APPLIED", result)
+        expected = "\n".join(f"LINE0{n}" for n in "12345678") + "\n"
+        self.assertEqual(self.FILE_FOO.read_text(), expected)
 
 
 if __name__ == "__main__":

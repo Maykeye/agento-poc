@@ -138,19 +138,6 @@ def _save_debug_patch_files(
 
 
 def _fix_patch_hunk_counts(patch: str) -> str:
-    """Fix hunk header line counts by calculating actual counts from hunk bodies.
-
-    The patch format is:
-    --- a/file
-    +++ b/file
-    @@ -old_start,old_count +new_start,new_count @@ context
-       context line (starts with space)
-    -removed line (starts with -)
-    +added line (starts with +)
-    """
-    # Returns: (fixed_patch, is_empty_patch)
-    # is_empty_patch is True if all hunks have no actual changes (only context lines)
-
     # Split into lines but preserve the trailing newline
     lines = patch.splitlines()
 
@@ -209,6 +196,16 @@ def _fix_patch_hunk_counts(patch: str) -> str:
             # Only add hunk if it has actual changes (not just context lines)
             if has_change:
                 has_non_empty_hunk = True
+                # First rebalance prefix and suffix, then fix counts
+                hunk_body_lines = _rebalance_hunk_prefix_suffix(
+                    hunk_body_lines, hunk_header
+                )
+                old_count = sum(
+                    1 for l in hunk_body_lines if l.startswith("-") or l.startswith(" ")
+                )
+                new_count = sum(
+                    1 for l in hunk_body_lines if l.startswith("+") or l.startswith(" ")
+                )
                 fixed_header = _fix_hunk_header(hunk_header, old_count, new_count)
                 result_lines.append(fixed_header)
                 result_lines.extend(hunk_body_lines)
@@ -222,6 +219,59 @@ def _fix_patch_hunk_counts(patch: str) -> str:
     if is_empty:
         return ""
     return "\n".join(result_lines) + "\n"
+
+
+def _rebalance_hunk_prefix_suffix(
+    hunk_body_lines: list[str], hunk_header: str
+) -> list[str]:
+    """Rebalance prefix and suffix context lines in a hunk body
+
+    For non-BOF hunks, count unchanged lines in prefix and suffix and remove extras.
+    """
+    # Parse hunk header to get old_start position
+    pattern = r"^@@ -(\d+),\d+ \+(\d+),\d+ @@(.*)$"
+    match = re.match(pattern, hunk_header)
+
+    if not match:
+        return hunk_body_lines
+
+    # Find the position where changed lines start and end
+    # Prefix context comes first, then changes, then suffix context
+    change_start = None
+    change_end = 0
+
+    for i, line in enumerate(hunk_body_lines):
+        if line.startswith("-") or line.startswith("+"):
+            if change_start is None:
+                change_start = i
+            change_end = i
+
+    # If no changes found, return as-is
+    if change_start is None:
+        return hunk_body_lines
+
+    # Count prefix context lines (before any changes)
+    prefix_context_count = change_start
+
+    # Count suffix context lines (after all changes)
+    suffix_context_count = len(hunk_body_lines) - 1 - change_end
+
+    # If counts are equal, no rebalancing needed
+    if prefix_context_count == suffix_context_count:
+        return hunk_body_lines
+
+    # Need to rebalance - remove extras from the longer side
+    # Remove from the end of the longer side (keeping more meaningful context)
+    if prefix_context_count > suffix_context_count:
+        # Remove extra prefix context lines from the beginning
+        excess = prefix_context_count - suffix_context_count
+        result = hunk_body_lines[excess:]
+    else:
+        # Remove extra suffix context lines from the end
+        excess = suffix_context_count - prefix_context_count
+        result = hunk_body_lines[: len(hunk_body_lines) - excess]
+
+    return result
 
 
 def _fix_hunk_header(header: str, old_count: int, new_count: int) -> str:
