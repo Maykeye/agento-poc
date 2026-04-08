@@ -162,12 +162,14 @@ def _parse_patch_hunks(patch: str) -> list[dict]:
             # Parse hunk body into old_lines and new_lines
             old_lines = []
             new_lines = []
+            deletion_lines = []  # Track which lines are deletions (for overlap checking)
             has_operations = False  # Track if hunk has any + or - lines
 
             for line in hunk_body_lines:
                 if line.startswith("-"):
                     # Removal - exists in old, not in new
                     old_lines.append(line[1:])  # Remove the '-' prefix
+                    deletion_lines.append(line[1:])  # Track for overlap checking
                     has_operations = True
                 elif line.startswith("+"):
                     # Addition - not in old, exists in new
@@ -187,6 +189,7 @@ def _parse_patch_hunks(patch: str) -> list[dict]:
                 {
                     "old_lines": old_lines,
                     "new_lines": new_lines,
+                    "deletion_lines": deletion_lines,
                     "start_line": start_line,
                     "has_operations": has_operations,
                 }
@@ -195,13 +198,45 @@ def _parse_patch_hunks(patch: str) -> list[dict]:
     return hunks
 
 
+def _has_overlapping_matches(
+    orig_lines: list[str], pattern: list[str]
+) -> bool:
+    """Check if pattern has overlapping matches in orig_lines.
+    
+    Two matches are considered overlapping if they share any lines.
+    Returns True if there are multiple matches that overlap.
+    """
+    if not pattern:
+        return False
+    
+    pattern_len = len(pattern)
+    matches: list[int] = []
+    
+    for i in range(len(orig_lines) - pattern_len + 1):
+        match = True
+        for j, line in enumerate(pattern):
+            if orig_lines[i + j] != line:
+                match = False
+                break
+        if match:
+            matches.append(i)
+    
+    # Check for overlapping matches
+    for i in range(len(matches) - 1):
+        # Two matches at positions m1 and m2 overlap if m2 < m1 + pattern_len
+        if matches[i + 1] < matches[i] + pattern_len:
+            return True
+    
+    return False
+
+
 def _find_hunk_positions(
     orig_lines: list[str], hunks: list[dict]
 ) -> list[tuple[int, int]] | None:
     """Find positions of all hunks in the original file.
 
     Returns list of (start_idx, end_idx) tuples for each hunk, or None if any hunk not found
-    or found ambiguously (multiple matches).
+    or found ambiguously (multiple matches or overlapping matches).
     Indices are 0-based, end_idx is exclusive.
     """
     n = len(hunks)
@@ -224,6 +259,9 @@ def _find_hunk_positions(
             assert isinstance(pos, tuple)
             positions[i] = pos
             search_start = pos[1]
+            # Check for overlapping matches in the full hunk
+            if _has_overlapping_matches(orig_lines, old_lines):
+                return None
         # If not found (None), leave as-is for second pass
 
     # Second pass: try to find missing hunks with constrained search
@@ -262,6 +300,9 @@ def _find_hunk_positions(
                 assert isinstance(pos, tuple)
                 positions[i] = pos
                 changed = True
+                # Check for overlapping matches in the full hunk
+                if _has_overlapping_matches(orig_lines, old_lines):
+                    return None
             elif pos is False:
                 # Ambiguous - multiple matches found, fail immediately
                 return None

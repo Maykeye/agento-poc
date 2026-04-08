@@ -504,7 +504,7 @@ class TestDiffPatch(TestBase):
 
     def test_edit_diff_patch_ambiguous_single_hunk(self):
         """Test that a single ambiguous hunk fails.
-        
+
         If original has multiple identical occurrences and only one hunk
         is provided, the patch should fail.
         """
@@ -528,7 +528,7 @@ class TestDiffPatch(TestBase):
 
     def test_edit_diff_patch_ambiguous_two_hunks_success(self):
         """Test that two hunks can disambiguate identical content.
-        
+
         If original has multiple identical occurrences, and we have two hunks
         that specify which one to change (by matching surrounding context),
         the patch should succeed.
@@ -568,7 +568,7 @@ class TestDiffPatch(TestBase):
 
     def test_edit_diff_patch_ambiguous_two_hunks_fail(self):
         """Test that two hunks still fail when ambiguity remains.
-        
+
         Even with two hunks, if the pattern matches multiple locations and
         the hunks don't provide enough context to disambiguate, it should fail.
         """
@@ -590,6 +590,40 @@ class TestDiffPatch(TestBase):
         result = tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
         self.assertIn("error", str(result))
         # Should report failure to find all hunks
+        error_msg = self.get_error_message(result)
+        self.assertIn("could not find all hunks", error_msg)
+
+    def test_edit_diff_patch_overlapping_search(self):
+        """Test patch fails when identical consecutive lines create overlap ambiguity.
+
+        If original file has:
+            AAA
+            AAA
+            AAA
+
+        And patch tries to delete:
+            -AAA
+            -AAA
+
+        We can't determine if AAA\nAAA are at lines 1-2 or 2-3.
+        The patch should fail because the search is ambiguous.
+        """
+        # Original file with three identical lines
+        original = "AAA\nAAA\nAAA\n"
+        self.FILE_FOO.write_text(original)
+
+        # Patch tries to delete two "AAA" lines
+        # This is ambiguous - could be lines 1-2 or lines 2-3
+        patch = f"""--- a/{self.FILE_FOO.name}
++++ b/{self.FILE_FOO.name}
+@@ -1,3 +1,1 @@
+-AAA
+-AAA
+"""
+
+        result = tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
+        self.assertIn("error", str(result))
+        # Should report failure to find all hunks due to overlapping matches
         error_msg = self.get_error_message(result)
         self.assertIn("could not find all hunks", error_msg)
 
