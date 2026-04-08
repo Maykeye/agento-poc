@@ -27,6 +27,7 @@ Files can contain extra commands at the start of the line (@ must be the first c
 * "@read intro.md" the line is replaced with the content of the file "intro.md". File "intro.md" is also expanded(i.e. it can include other files)
 * "@project_dir /home/user/src/project-directory/" sets the project directory which will be used for tools (if tool expects path, internally project directory is prepended to the path)
 * "@#" the commentary (ignored)
+* "@done" stops parsing commands from this point and all lines starting with `@` are appended as usual lines
 
 Example can be seen in ./tests/manual_test_fork.md 
 

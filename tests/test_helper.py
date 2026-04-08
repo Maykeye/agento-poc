@@ -311,6 +311,7 @@ class TestBase(unittest.TestCase):
         return msgs[-1]["content"]
 
     def epilogue(self):
+        """After tool call is finished, llm is always called again"""
         context_handler().prepare_current_llm(LLM.INSTANCES[-1].llm)
         LLM.INSTANCES[-1].messages.append(LLM.INSTANCES[-1].llm.msg_assistant("Done"))
 
