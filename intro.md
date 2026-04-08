@@ -25,13 +25,15 @@ Sql utilities are stored in `utilsql.py`
 # Tests
 
 - Please create all test classes based on TestBase from tests/test_helper.py
+- instead of self.assertIsInstance(var, type) use assert isinstance. 
+Example: `assert isinstance(result, dict)`
 
 ## Tests for tools
 
 ### Files set up and cleared by TestBase
 
 - Use FILE_FOO as primary test file unless specified the other.
-- If you need the second file, use FILE_BAR
+- If you need the second file(e.g. empty file), use FILE_BAR and write content there
 
 ### Context tests
 

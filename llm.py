@@ -7,11 +7,10 @@ import os
 import requests
 import sys
 import traceback
-from utils import name_tag, debug_print
+from utils import name_tag
 from tool import Tool
 from context import context_handler
 import utilsql
-import datetime
 
 
 @dataclass
@@ -43,22 +42,6 @@ class Response:
     content: str
     reasoning_content: str
     tool_calls: list[ToolCall] = field(default_factory=list)
-
-
-def open_log():
-    # TODO: logging.info?
-    timestamp = datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
-    path = f"/run/user/{os.getuid()}/agento-messages.{timestamp}.log"
-    try:
-        f = open(path, "w")
-        print(f"LOGGING ALL MESSAGES TO {f}", file=sys.stderr)
-        return f
-    except Exception as e:
-        print(f"Can't open logging file {path}: {e}")
-        return None
-
-
-LOG = open_log()
 
 
 @dataclass
@@ -144,10 +127,6 @@ class LLM:
 
         response = requests.post(self.url, json=payload, stream=True)
         response.raise_for_status()
-        if LOG:
-            print("----------------", file=LOG)
-            print(f"<<< {json.dumps(messages, ensure_ascii=False, indent=2)}", file=LOG)
-            print("----------------", file=LOG)
 
         finish_reason = ""
         res = Response(content="", reasoning_content="")
@@ -163,8 +142,6 @@ class LLM:
                 continue
             data = json.loads(sdata)
             data = data["choices"][0]
-            if LOG:
-                LOG.write(f">>> {sdata}\n")
             finish_reason = data["finish_reason"]
             if self.callback and finish_reason:
                 self.callback({}, finish_reason=finish_reason)

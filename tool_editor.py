@@ -57,6 +57,7 @@ Empty files cannot be edited - use write_file instead.""",
         llm.add_tool(EditorToolGoto())
         llm.add_tool(EditorToolPatchCurrentFile())
         llm.add_tool(EditorToolEditFile())
+        llm.add_tool(EditorToolSwitchFile())
         llm.add_tool(EditorToolRead())
         llm.add_tool(EditorToolWriteNewContent())
         llm.add_tool(EditorToolFinishEditing())
@@ -128,9 +129,10 @@ EDITOR MODE RULES:
 3. The buffer shows lines starting from your current line position
 4. You can navigate using: goto <line>, find_prev/find_next <pattern>
 5. You can edit using: patch_current_file (PREFERRED), edit_file (for single replacements)
-6. When done, use: write new_content (to save) or finish_editing(report) to quit
-7. All tools except read and write work ONLY on the current buffer view
-8. The current file path is: {path}
+6. You can switch files using: edit_file <path>
+7. When done, use: write new_content (to save) or finish_editing(report) to quit
+8. All tools except read and write work ONLY on the current buffer view
+9. The current file path is: {path}
 
 PREFERRED APPROACH: Use patch_current_file for edits. It's more reliable and allows multiple changes.
 
@@ -193,8 +195,8 @@ Current buffer (starting from line 1):"""
             "find_next",
             "goto",
             "patch_current_file",
-            "edit_file_in_buffer",
-            "read",
+            "edit_file",
+            "read_file",
             "write_new_content",
             "finish_editing",
         }
@@ -771,7 +773,7 @@ class EditorToolEditFile(Tool):
 
     def __init__(self):
         super().__init__(
-            name="edit_file",
+            name="search_and_replace",
             description="""Replace text in the current VISIBLE BUFFER only.
 
 ⚠️ CRITICAL RESTRICTIONS:
@@ -786,7 +788,7 @@ class EditorToolEditFile(Tool):
   - Better context control
   - Edits outside current buffer view
 
-Use edit_file only for simple, single replacements within visible buffer.""",
+Use search_and_replace only for simple, single replacements within visible buffer.""",
         )
 
     def __call__(
@@ -901,22 +903,93 @@ class EditorToolRead(Tool):
 
     def __init__(self):
         super().__init__(
-            name="read",
-            description="""Read another file while in editor mode.
+            name="read_file_to_view",
+            description="""Read another file to view while in editor mode.
 
 This allows you to view other files without leaving the editor.
-Uses standard read_file tool functionality.
-The editor state (current line, file being edited) is preserved.""",
+This does not change the current file being edited.
+All edit commands after read_file will apply to the file that was edited before reading""",
         )
 
     def __call__(self, path: Annotated[str, "Path to the file to read"]):
-
         read_tool = ToolReadFile()
         result = read_tool(path)
-
-        # Return the result - this will show the file content
-        # Editor state is preserved, so user can continue editing
         return result
+
+
+class EditorToolSwitchFile(Tool):
+    """Switch to editing a different file while in editor mode."""
+
+    def __init__(self):
+        super().__init__(
+            name="edit_file",
+            description="""Switch to editing a different file while in editor mode.
+
+This tool allows you to switch to a new file without exiting editor mode.
+
+REQUIREMENTS:
+- The new file must exist and be non-empty
+- After switching, the editor continues with the new file starting from line 1
+
+Use this when you need to edit other file from the current one quckly, but it's preferrably to finish_editing and in report state what needs to be edited.""",
+        )
+
+    def __call__(self, path: Annotated[str, "Path to the new file to edit"]):
+        # Get current LLM instance
+        if not LLM.INSTANCES:
+            return {"error": "No LLM instance available"}
+
+        llm = LLM.INSTANCES[-1].llm
+        llm_id = id(llm)
+
+        # Check if we're in editor mode
+        if llm_id not in ToolEditor._editing_files:
+            return {"error": "Not in editor mode"}
+
+        # Validate the new file
+        p = real_path(path)
+
+        if not p.exists():
+            return {
+                "error": f"File {path} does not exist",
+                "suggestion": "Use write_file to create a new file first",
+            }
+
+        if not p.is_file():
+            return {"error": f"{path} is not a file"}
+
+        # Read the new file content
+        try:
+            new_text = p.read_text()
+        except Exception as e:
+            return {"error": f"Failed to read file {path}: {e}"}
+
+        # Check if file is empty
+        if not new_text.strip():
+            return {
+                "error": f"File {path} is empty",
+                "suggestion": "Use write_file to add content first",
+            }
+
+        # Prune old buffers if we exceed KEEP_OLD_BUFFERS
+        messages = LLM.INSTANCES[-1].messages
+        ToolEditor._prune_old_buffers(messages)
+
+        # Update editing state to the new file
+        old_file = ToolEditor._editing_files[llm_id]
+        ToolEditor._editing_files[llm_id] = path
+        ToolEditor._current_lines[llm_id] = 1  # Reset to line 1
+
+        # Format output
+        output_lines = []
+        output_lines.append(f"Switching from '{old_file}' to '{path}'")
+        output_lines.append("")
+
+        # Print buffer from line 1 of new file
+        buffer_output = ToolEditor._format_buffer(path, 1, new_text)
+        output_lines.append(buffer_output)
+
+        return "\n".join(output_lines)
 
 
 class EditorToolWriteNewContent(Tool):
