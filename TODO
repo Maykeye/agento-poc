@@ -1,7 +1,6 @@
 [ ] Editor: edit_file: clears state and moves to editing a file
 
 - after read print "Note, you are still editing {filename}, to edit {read file}, switch to it"
-- write: new_content -> text
 - command @assistant fake assistant message
 - command @tool-read fakes sending read command (after which true response is appended)
 - editor: prepend <line>, <content>. Fine single <line>, insert <content> before it

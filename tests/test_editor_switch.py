@@ -37,6 +37,7 @@ class TestEditorSwitch(unittest.TestCase):
         config.set_project_directory(tmpfilename(""), silent=True)
         config.set_logging_sqlite_path(":memory:")
         utilsql.reset_all_caches()
+        tool_editor.ToolEditor.reset()
         LLM.INSTANCES.clear()
 
         # Create test files
@@ -194,7 +195,7 @@ class TestEditorSwitch(unittest.TestCase):
         result = switch_tool(self.FILE_BAR.name)
 
         # Should get an error
-        assert isinstance(result, dict)
+        assert isinstance(result, dict), tool_editor.ToolEditor._current_lines
         self.assertIn("error", result)
         self.assertIn("Not in editor mode", result["error"])
 

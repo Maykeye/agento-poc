@@ -37,6 +37,11 @@ class ToolEditor(Tool):
     # Static storage for the file being edited
     _editing_files: dict[int, str] = {}  # {id(LLM): path}
 
+    @staticmethod
+    def reset():
+        ToolEditor._current_lines.clear()
+        ToolEditor._editing_files.clear()
+
     SKIP_PRINTING: bool = False
 
     def __init__(self):
@@ -130,7 +135,7 @@ EDITOR MODE RULES:
 4. You can navigate using: goto <line>, find_prev/find_next <pattern>
 5. You can edit using: patch_current_file (PREFERRED), edit_file (for single replacements)
 6. You can switch files using: edit_file <path>
-7. When done, use: write new_content (to save) or finish_editing(report) to quit
+7. When done, use: write text (to save) or finish_editing(report) to quit
 8. All tools except read and write work ONLY on the current buffer view
 9. The current file path is: {path}
 
@@ -197,7 +202,7 @@ Current buffer (starting from line 1):"""
             "patch_current_file",
             "edit_file",
             "read_file",
-            "write_new_content",
+            "write_file",
             "finish_editing",
         }
 
@@ -997,18 +1002,18 @@ class EditorToolWriteNewContent(Tool):
 
     def __init__(self):
         super().__init__(
-            name="write_new_content",
+            name="write_file",
             description="""Write the complete new content to the current file and exit editing mode.
 
 This tool:
 1. Validates that the provided path matches the currently editing file
-2. Writes the entire new_content to the file (replacing all existing content)
+2. Writes the entire `text` to the file (replacing all existing content)
 3. Exits editor mode
 4. Returns a result indicating success
 
 REQUIREMENTS:
-- path: Must match the file currently being edited in editor mode
-- new_content: Complete new content to write (replaces all existing content)
+- path: Must match the file currently being edited in editor mode, as only editing it is allowed.
+- text: Complete new content to write (replaces all existing content)
 
 Use this when you want to completely replace the file content with new content.
 The editor will exit and return control to the main LLM.""",
