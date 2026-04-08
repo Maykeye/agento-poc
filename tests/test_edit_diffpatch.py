@@ -502,6 +502,97 @@ class TestDiffPatch(TestBase):
         expected = "\n".join(f"LINE0{n}" for n in "12345678") + "\n"
         self.assertEqual(self.FILE_FOO.read_text(), expected)
 
+    def test_edit_diff_patch_ambiguous_single_hunk(self):
+        """Test that a single ambiguous hunk fails.
+        
+        If original has multiple identical occurrences and only one hunk
+        is provided, the patch should fail.
+        """
+        # Original file with duplicate content
+        original = "A\n{}\nB\n{}\n"
+        self.FILE_FOO.write_text(original)
+
+        # Single hunk trying to replace {} - ambiguous which {}
+        # (no context to disambiguate)
+        patch = f"""--- a/{self.FILE_FOO.name}
++++ b/{self.FILE_FOO.name}
+@@ -2,1 +2,1 @@
+-{{}}
++[]"""
+
+        result = tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
+        self.assertIn("error", str(result))
+        # Should report failure to find all hunks
+        error_msg = self.get_error_message(result)
+        self.assertIn("could not find all hunks", error_msg)
+
+    def test_edit_diff_patch_ambiguous_two_hunks_success(self):
+        """Test that two hunks can disambiguate identical content.
+        
+        If original has multiple identical occurrences, and we have two hunks
+        that specify which one to change (by matching surrounding context),
+        the patch should succeed.
+        """
+        # Original file with duplicate content
+        original = "A\n{}\nB\n{}\n"
+        self.FILE_FOO.write_text(original)
+
+        # Two hunks: first changes B to C, second changes {} after B to []
+        # The second {} is uniquely identified because it's after the first change
+        patch1 = f"""--- a/{self.FILE_FOO.name}
++++ b/{self.FILE_FOO.name}
+@@ -2,3 +2,3 @@
+ {{}}
+-B
++C
+ {{}}"""
+
+        result = tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, patch1)
+        self.assertIn("PATCH APPLIED", result)
+        # After first patch: A\n{}\nC\n{}\n
+        self.assertEqual(self.FILE_FOO.read_text(), "A\n{}\nC\n{}\n")
+
+        # Now change the {} after C (which is uniquely identified)
+        patch2 = f"""--- a/{self.FILE_FOO.name}
++++ b/{self.FILE_FOO.name}
+@@ -2,4 +2,4 @@
+ {{}}
+ C
+-{{}}
++[]"""
+
+        result = tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, patch2)
+        self.assertIn("PATCH APPLIED", result)
+        # Final: A\n{}\nC\n[]\n
+        self.assertEqual(self.FILE_FOO.read_text(), "A\n{}\nC\n[]\n")
+
+    def test_edit_diff_patch_ambiguous_two_hunks_fail(self):
+        """Test that two hunks still fail when ambiguity remains.
+        
+        Even with two hunks, if the pattern matches multiple locations and
+        the hunks don't provide enough context to disambiguate, it should fail.
+        """
+        # Original file with duplicate content
+        original = "X\n{}\n{}\nY\n"
+        self.FILE_FOO.write_text(original)
+
+        # Two hunks: first changes X to Z, second tries to change {}
+        # Both {} are between X and Y, so even after changing X, {} is still ambiguous
+        patch = f"""--- a/{self.FILE_FOO.name}
++++ b/{self.FILE_FOO.name}
+@@ -1,1 +1,1 @@
+-X
++Z
+@@ -2,1 +2,1 @@
+-{{}}
++[]"""
+
+        result = tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, patch)
+        self.assertIn("error", str(result))
+        # Should report failure to find all hunks
+        error_msg = self.get_error_message(result)
+        self.assertIn("could not find all hunks", error_msg)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -7,7 +7,7 @@ import random
 
 from config import READ_ONLY_FILES, real_path, READ_ONLY_ERROR
 from context import context_handler
-from tool import Tool, run_executable
+from tool import Tool
 
 
 class ToolEditDiffPatch(Tool):
@@ -62,7 +62,6 @@ class ToolEditDiffPatch(Tool):
         patch_path_a = lines[0][5:]  # Remove "--- a/" prefix
 
         # Normalize paths for comparison - handle relative paths properly
-        # If patch path starts with /, strip it; if not, prepend project dir
         patch_path_normalized = real_path(patch_path_a.removeprefix("/")).as_posix()
         requested_path_normalized = p.as_posix()
 
@@ -80,39 +79,284 @@ class ToolEditDiffPatch(Tool):
                     "error": f"Patch contains multiple files. Only single file patches are allowed.",
                 }
 
-        # Fix hunk line counts before applying patch
-        fixed_patch = _fix_patch_hunk_counts(patch)
+        # Parse patch into hunks
+        hunks = _parse_patch_hunks(patch)
 
-        if not fixed_patch:
+        if not hunks:
             return {"warning": "no changes were given"}
 
-        # Run patch directly on the file (don't use -p, just pass the file)
-        result = run_executable(
-            ["patch", "--reject-file=-", "--no-backup", "-u", str(p)],
-            stdin_text=fixed_patch,
-        )
+        # Check if all hunks have no operations (only context lines)
+        all_no_operations = all(not hunk.get("has_operations", False) for hunk in hunks)
+        if all_no_operations:
+            return {"warning": "patch contains no changes (all hunks are empty)"}
 
-        if result.get("exitcode") != 0:
+        # Parse original content into lines
+        orig_lines = original_content.splitlines()
+
+        # Find positions of all hunks in the original file
+        hunk_positions = _find_hunk_positions(orig_lines, hunks)
+
+        if hunk_positions is None:
+            # Failed to find all hunks
             if not ToolEditDiffPatch.SKIP_SAVING_INVALID_PATCHES:
                 _save_debug_patch_files(path, original_content, patch)
             return {
                 path: "error",
-                "error": f"Patch failed with exit code {result.get('exitcode')}",
-                "stdout": result.get("stdout", ""),
-                "stderr": result.get("stderr", ""),
+                "error": f"Could not apply patch: could not find all hunks in file",
             }
+
+        # Apply the patch manually
+        new_content = _apply_patch_manually(
+            orig_lines, hunks, hunk_positions, original_content
+        )
+
+        # Write the new content to the file
+        p.write_text(new_content)
 
         # Read the modified file content and update context
         new_text = p.read_text()
         handler = context_handler()
 
         # Update fold line numbers if the edit changed the line count
-        old_line_count = len(patch.splitlines())  # This is just for context
+        old_line_count = len(orig_lines)
         new_line_count = len(new_text.splitlines())
         if handler.has_folds(path):
             handler.update_fold_line_numbers(path, old_line_count, new_line_count)
 
         return handler.update(path, new_text, "edit_diff_patch")
+
+
+def _parse_patch_hunks(patch: str) -> list[dict]:
+    """Parse patch into list of hunks.
+
+    Each hunk is a dict with:
+    - 'old_lines': list of lines that exist in original (context + removal)
+    - 'new_lines': list of lines that should exist in result (context + addition)
+    - 'start_line': starting line number from hunk header (1-indexed)
+    """
+    lines = patch.splitlines()
+
+    # Remove empty trailing element if patch ends with \n
+    if lines and lines[-1] == "":
+        lines = lines[:-1]
+
+    hunks = []
+    i = 2  # Skip header lines
+
+    while i < len(lines):
+        if lines[i].startswith("@@ "):
+            # Parse hunk header: @@ -old_start,old_count +new_start,new_count @@
+            hunk_header = lines[i]
+            i += 1
+
+            # Collect hunk body
+            hunk_body_lines = []
+            while (
+                i < len(lines)
+                and not lines[i].startswith("@@ ")
+                and not lines[i].startswith("--- ")
+            ):
+                hunk_body_lines.append(lines[i])
+                i += 1
+
+            # Parse hunk body into old_lines and new_lines
+            old_lines = []
+            new_lines = []
+            has_operations = False  # Track if hunk has any + or - lines
+
+            for line in hunk_body_lines:
+                if line.startswith("-"):
+                    # Removal - exists in old, not in new
+                    old_lines.append(line[1:])  # Remove the '-' prefix
+                    has_operations = True
+                elif line.startswith("+"):
+                    # Addition - not in old, exists in new
+                    new_lines.append(line[1:])  # Remove the '+' prefix
+                    has_operations = True
+                elif line.startswith(" "):
+                    # Context - exists in both old and new
+                    old_lines.append(line[1:])  # Remove the ' ' prefix
+                    new_lines.append(line[1:])  # Remove the ' ' prefix
+                # Empty lines without prefix are ignored (they're artifacts of split)
+
+            # Extract start line from header
+            match = re.match(r"^@@ -(\d+),\d+ \+(\d+),\d+ @@", hunk_header)
+            start_line = int(match.group(1)) if match else 0
+
+            hunks.append(
+                {
+                    "old_lines": old_lines,
+                    "new_lines": new_lines,
+                    "start_line": start_line,
+                    "has_operations": has_operations,
+                }
+            )
+
+    return hunks
+
+
+def _find_hunk_positions(
+    orig_lines: list[str], hunks: list[dict]
+) -> list[tuple[int, int]] | None:
+    """Find positions of all hunks in the original file.
+
+    Returns list of (start_idx, end_idx) tuples for each hunk, or None if any hunk not found
+    or found ambiguously (multiple matches).
+    Indices are 0-based, end_idx is exclusive.
+    """
+    n = len(hunks)
+    positions: list[tuple[int, int] | None] = [None] * n
+
+    # First pass: sequential search
+    search_start = 0
+    for i, hunk in enumerate(hunks):
+        old_lines = hunk["old_lines"]
+        if not old_lines:
+            # Empty old lines - use start_line from header
+            positions[i] = (0, 0)
+            continue
+
+        pos = _find_hunk_in_range(orig_lines, old_lines, search_start, len(orig_lines))
+        if pos is False:
+            # Ambiguous - multiple matches found, fail immediately
+            return None
+        if pos is not None:
+            assert isinstance(pos, tuple)
+            positions[i] = pos
+            search_start = pos[1]
+        # If not found (None), leave as-is for second pass
+
+    # Second pass: try to find missing hunks with constrained search
+    changed = True
+    while changed:
+        changed = False
+        for i in range(n):
+            if positions[i] is not None:
+                continue  # Already found
+
+            old_lines = hunks[i]["old_lines"]
+            if not old_lines:
+                positions[i] = (0, 0)
+                changed = True
+                continue
+
+            # Find search range based on neighboring found hunks
+            # Search after the last found hunk before i
+            search_start = 0
+            for j in range(i - 1, -1, -1):
+                position_j = positions[j]
+                if position_j is not None:
+                    search_start = position_j[1]
+                    break
+
+            # Search before the first found hunk after i
+            search_end = len(orig_lines)
+            for j in range(i + 1, n):
+                position_j = positions[j]
+                if position_j is not None:
+                    search_end = position_j[0]
+                    break
+
+            pos = _find_hunk_in_range(orig_lines, old_lines, search_start, search_end)
+            if pos is not None:
+                assert isinstance(pos, tuple)
+                positions[i] = pos
+                changed = True
+            elif pos is False:
+                # Ambiguous - multiple matches found, fail immediately
+                return None
+
+    # Check if all hunks found
+    if None in positions:
+        return None
+
+    return list(positions)  # type: ignore
+
+
+def _find_hunk_in_range(
+    orig_lines: list[str], hunk_old_lines: list[str], start: int, end: int
+) -> tuple[int, int] | None | bool:
+    """Find hunk_old_lines in orig_lines[start:end].
+
+    Returns:
+        - (start_idx, end_idx) if found exactly once
+        - None if not found
+        - False if found multiple times (ambiguous)
+    """
+    if not hunk_old_lines:
+        return (start, start)
+
+    hunk_len = len(hunk_old_lines)
+    if hunk_len > end - start:
+        return None
+
+    matches = []
+    for i in range(start, end - hunk_len + 1):
+        found = True
+        for j, line in enumerate(hunk_old_lines):
+            if orig_lines[i + j] != line:
+                found = False
+                break
+        if found:
+            matches.append((i, i + hunk_len))
+
+    if len(matches) == 0:
+        return None
+    elif len(matches) == 1:
+        return matches[0]
+    else:
+        return False  # Multiple matches - ambiguous
+
+
+def _apply_patch_manually(
+    orig_lines: list[str],
+    hunks: list[dict],
+    positions: list[tuple[int, int]],
+    original_content: str,
+) -> str:
+    """Apply patch manually by replacing old lines with new lines.
+
+    Returns the new content as a string.
+    """
+    if not hunks:
+        return "\n".join(orig_lines)
+
+    # Sort hunks by position (they should already be in order, but just in case)
+    sorted_indices = sorted(range(len(positions)), key=lambda i: positions[i][0])
+
+    # Build new content by processing regions between and within hunks
+    result_lines: list[str] = []
+    prev_end = 0
+
+    for idx in sorted_indices:
+        hunk = hunks[idx]
+        start, end = positions[idx]
+
+        # Add lines before this hunk
+        result_lines.extend(orig_lines[prev_end:start])
+
+        # Add new lines from hunk (replacing old lines)
+        result_lines.extend(hunk["new_lines"])
+
+        prev_end = end
+
+    # Add remaining lines after last hunk
+    result_lines.extend(orig_lines[prev_end:])
+
+    # Join with newlines
+    result = "\n".join(result_lines)
+
+    # Preserve trailing newline: only add if original had one
+    # Special case: empty file with new content should have trailing newline
+    if result_lines:
+        if not original_content:
+            # Empty file becoming non-empty - add trailing newline
+            result += "\n"
+        elif original_content.endswith("\n"):
+            # Original had trailing newline - preserve it
+            result += "\n"
+
+    return result
 
 
 def _save_debug_patch_files(
@@ -135,159 +379,3 @@ def _save_debug_patch_files(
 
     patch_file = temp_dir / f"{simplified_path}.patch.{timestamp}.{rng}"
     patch_file.write_text(patch_content)
-
-
-def _fix_patch_hunk_counts(patch: str) -> str:
-    # Split into lines but preserve the trailing newline
-    lines = patch.splitlines()
-
-    # Remove empty trailing element if patch ends with \n
-    if lines and lines[-1] == "":
-        lines = lines[:-1]
-
-    if len(lines) < 2:
-        return patch
-
-    result_lines = []
-    i = 0
-    total_lines = len(lines)
-
-    # Copy header lines (first two lines: --- a/... and +++ b/...)
-    while i < total_lines and not lines[i].startswith("@@ "):
-        result_lines.append(lines[i])
-        i += 1
-
-    # Process hunks - track if we have any non-empty hunks
-    has_non_empty_hunk = False
-
-    while i < total_lines:
-        if lines[i].startswith("@@ "):
-            # Parse hunk header: @@ -old_start,old_count +new_start,new_count @@
-            hunk_header = lines[i]
-            i += 1
-
-            has_change = False
-
-            # Collect and count lines in the hunk body
-            old_count = 0
-            new_count = 0
-            hunk_body_lines = []
-
-            # Process hunk body until we hit next hunk or end of file
-            while (
-                i < total_lines
-                and not lines[i].startswith("@@ ")
-                and not lines[i].startswith("--- ")
-            ):
-                line = lines[i]
-                if line.startswith("-"):
-                    old_count += 1
-                    has_change = True
-                elif line.startswith("+"):
-                    new_count += 1
-                    has_change = True
-                elif line.startswith(" "):
-                    old_count += 1
-                    new_count += 1
-                # Empty lines or special lines don't count but are kept
-                hunk_body_lines.append(line)
-                i += 1
-
-            # Only add hunk if it has actual changes (not just context lines)
-            if has_change:
-                has_non_empty_hunk = True
-                # First rebalance prefix and suffix, then fix counts
-                hunk_body_lines = _rebalance_hunk_prefix_suffix(
-                    hunk_body_lines, hunk_header
-                )
-                old_count = sum(
-                    1 for l in hunk_body_lines if l.startswith("-") or l.startswith(" ")
-                )
-                new_count = sum(
-                    1 for l in hunk_body_lines if l.startswith("+") or l.startswith(" ")
-                )
-                fixed_header = _fix_hunk_header(hunk_header, old_count, new_count)
-                result_lines.append(fixed_header)
-                result_lines.extend(hunk_body_lines)
-
-        else:
-            # Any remaining lines after last hunk
-            result_lines.append(lines[i])
-            i += 1
-
-    is_empty = not has_non_empty_hunk
-    if is_empty:
-        return ""
-    return "\n".join(result_lines) + "\n"
-
-
-def _rebalance_hunk_prefix_suffix(
-    hunk_body_lines: list[str], hunk_header: str
-) -> list[str]:
-    """Rebalance prefix and suffix context lines in a hunk body
-
-    For non-BOF hunks, count unchanged lines in prefix and suffix and remove extras.
-    """
-    # Parse hunk header to get old_start position
-    pattern = r"^@@ -(\d+),\d+ \+(\d+),\d+ @@(.*)$"
-    match = re.match(pattern, hunk_header)
-
-    if not match:
-        return hunk_body_lines
-
-    # Find the position where changed lines start and end
-    # Prefix context comes first, then changes, then suffix context
-    change_start = None
-    change_end = 0
-
-    for i, line in enumerate(hunk_body_lines):
-        if line.startswith("-") or line.startswith("+"):
-            if change_start is None:
-                change_start = i
-            change_end = i
-
-    # If no changes found, return as-is
-    if change_start is None:
-        return hunk_body_lines
-
-    # Count prefix context lines (before any changes)
-    prefix_context_count = change_start
-
-    # Count suffix context lines (after all changes)
-    suffix_context_count = len(hunk_body_lines) - 1 - change_end
-
-    # If counts are equal, no rebalancing needed
-    if prefix_context_count == suffix_context_count:
-        return hunk_body_lines
-
-    # Need to rebalance - remove extras from the longer side
-    # Remove from the end of the longer side (keeping more meaningful context)
-    if prefix_context_count > suffix_context_count:
-        # Remove extra prefix context lines from the beginning
-        excess = prefix_context_count - suffix_context_count
-        result = hunk_body_lines[excess:]
-    else:
-        # Remove extra suffix context lines from the end
-        excess = suffix_context_count - prefix_context_count
-        result = hunk_body_lines[: len(hunk_body_lines) - excess]
-
-    return result
-
-
-def _fix_hunk_header(header: str, old_count: int, new_count: int) -> str:
-    """Replace old and new counts in hunk header while preserving start positions.
-
-    Format: @@ -old_start,old_count +new_start,new_count @@ optional context
-    """
-    # Pattern to match hunk header: @@ -old_start,old_count +new_start,new_count @@
-    pattern = r"^@@ -(\d+),\d+ \+(\d+),\d+ @@(.*)$"
-    match = re.match(pattern, header)
-
-    if match:
-        old_start = match.group(1)
-        new_start = match.group(2)
-        rest = match.group(3)  # Optional context after @@
-        return f"@@ -{old_start},{old_count} +{new_start},{new_count} @@{rest}"
-
-    # If pattern doesn't match, return header as-is (shouldn't happen for valid patches)
-    return header
