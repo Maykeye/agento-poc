@@ -10,6 +10,7 @@ import traceback
 from utils import name_tag
 from tool import Tool
 from context import context_handler
+import datetime
 
 
 @dataclass
@@ -38,7 +39,8 @@ class Response:
 
 def open_log():
     # TODO: logging.info?
-    path = f"/run/user/{os.getuid()}/messages.log"
+    timestamp = datetime.datetime.now().strftime("%Y%m%d.%H%M%S")
+    path = f"/run/user/{os.getuid()}/agento-messages.{timestamp}.log"
     try:
         f = open(path, "w")
         print(f"LOGGING ALL MESSAGES TO {f}", file=sys.stderr)
