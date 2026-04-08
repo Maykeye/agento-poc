@@ -11,7 +11,7 @@ Examples of tested models:
 
 * `Qwen3.5-35B-A3B-UD-Q4_K_M.gguf` and `Qwen3.5-27B-IQ4_NL.gguf` are stubborn. They will not give up until they can.
 * `Nemotron-Cascade-2-30B-A3B.i1-Q4_K_S.gguf` will give up once running `cargo check` fails enough.
-* `gemma-4-26B-A4B-it-UD-Q4_K_XL.gguf` is not that good. Can't call fork properly (instead of array passes unescaped string)
+* `gemma-4-26B-A4B-it-UD-Q4_K_XL.gguf` is not that good. Can't start calling tools. Maybe llama.cpp is not documented or tested quants are low quality
 
 From these three models Qwen3.5-27B feels smartest but slowest.
 For example it helped implemented Suffix Context management. 
