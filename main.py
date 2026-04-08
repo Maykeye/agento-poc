@@ -57,7 +57,7 @@ class AgencyNode:
 
     def _llm_editing(self, llm: LLM):
         llm.add_tool(tool_io.ToolWriteFile())
-        # llm.add_tool(tool_io.ToolEditFile())
+        llm.add_tool(tool_io.ToolEditFile())
         llm.add_tool(tool_edit_patch.ToolEditDiffPatch())
         llm.add_tool(tool_io.ToolDeleteFile())
         llm.add_tool(tool_io.ToolMkDir())

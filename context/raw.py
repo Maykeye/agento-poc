@@ -14,7 +14,8 @@ class RawHandler(ContextHandler):
         elif oper == "write_file":
             sz = Path(config.real_path(path)).stat().st_size
             lines = text.splitlines()
-            return f">>> OK: {oper} {path} ({sz} bytes, {len(lines)} lines)\n>>> FIRST WRITTEN LINE: {lines[0]}"
+            first_line = f"\n>>> FIRST WRITTEN LINE: {lines[0]}" if lines else ""
+            return f">>> OK: {oper} {path} ({sz} bytes, {len(lines)} lines){first_line}"
         elif oper == "delete_file":
             return {path: "ok", "desc": f"File deleted"}
         elif oper == "edit_file":

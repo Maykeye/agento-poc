@@ -1,7 +1,8 @@
 from pathlib import Path
+import glob
 from typing import Annotated
 import os
-from config import real_path, READ_ONLY_FILES, READ_ONLY_ERROR
+from config import real_path, READ_ONLY_FILES, READ_ONLY_ERROR, project_directory
 from tool import Tool
 import re
 from context import ContextMode, context_handler
@@ -13,7 +14,7 @@ class ToolLs(Tool):
     def __init__(self):
         super().__init__(
             name="ls",
-            description="List files and subdirectories in a given directories",
+            description="List files and subdirectories in a given directories. Supports glob patterns (e.g., *.rs, **/*.py)",
         )
 
     def _dumb_gitignore_filter(self):
@@ -26,6 +27,10 @@ class ToolLs(Tool):
         lines = [re.sub(r"#.*", "", x).strip() for x in lines]
         lines = [real_path(x) for x in lines]
         return lines
+
+    def _is_glob_pattern(self, path: str) -> bool:
+        """Check if path contains glob patterns."""
+        return any(c in path for c in "*?[]")
 
     def __call__(
         self,
@@ -40,41 +45,78 @@ class ToolLs(Tool):
         out = []
 
         for path in paths:
-            p = real_path(path)
-            if p.exists() and not p.is_dir():
-                out.append(f"Listing: {path} : Path exists, but is not a directory")
-                continue
-            if not p.exists():
-                out.append(f"Listing: {path} : Path does not exist")
-                continue
+            # Check if this is a glob pattern
+            if self._is_glob_pattern(path):
+                # Resolve the path relative to the project directory
+                # glob.glob resolves relative paths from the current directory,
+                # but we need to resolve from the project directory
+                project_dir = project_directory()
+                # Convert the pattern to an absolute path relative to project directory
+                abs_pattern = project_dir / path
 
-            # We'll excldue listing of files included in .gitignore
-            exclude = self._dumb_gitignore_filter()
-            entries = [x for x in p.glob("*")]
+                # Use glob.glob with recursive=True for glob patterns
+                matched = glob.glob(str(abs_pattern), recursive=True)
 
-            buf = []
-            if p != real_path("."):
-                buf.append(" Directory: ..")
-            for entry in entries:
-                if entry.absolute() in exclude:
+                if not matched:
+                    out.append(f"Listing: {path} : No files found matching pattern")
                     continue
 
-                desc = ""
-                if entry.is_file():
-                    desc += " File: "
+                # Build output for matched files
+                buf = []
+                for m in matched:
+                    m_path = Path(m)
+                    # Convert absolute path to relative path from project directory
+                    rel_path = m_path.relative_to(project_dir)
+                    if m_path.is_file():
+                        desc = f" File: {rel_path}"
+                        desc += f" (Size: {os.path.getsize(m_path)} bytes)"
+                    elif m_path.is_dir():
+                        desc = f" Directory: {rel_path}"
+                    else:
+                        desc = f" Path: {rel_path}"
+                    buf.append(desc)
+                buf.sort(key=lambda v: v.lower())
 
-                if entry.is_dir():
-                    desc += " Directory: "
+                out.append(
+                    f"Listing: {path}\n" + "\n".join(buf) + f"\n({len(buf)} entries)"
+                )
+            else:
+                # Original behavior for non-glob paths
+                p = real_path(path)
+                if p.exists() and not p.is_dir():
+                    out.append(f"Listing: {path} : Path exists, but is not a directory")
+                    continue
+                if not p.exists():
+                    out.append(f"Listing: {path} : Path does not exist")
+                    continue
 
-                desc += entry.name
-                if entry.is_file():
-                    desc += f" (Size: {os.path.getsize(entry)} bytes)"
-                buf.append(desc)
-            buf.sort(key=lambda v: v.lower())
+                # We'll excldue listing of files included in .gitignore
+                exclude = self._dumb_gitignore_filter()
+                entries = [x for x in p.glob("*")]
 
-            out.append(
-                f"Listing: {path}\n" + "\n".join(buf) + f"\n({len(buf)} entries)"
-            )
+                buf = []
+                if p != real_path("."):
+                    buf.append(" Directory: ..")
+                for entry in entries:
+                    if entry.absolute() in exclude:
+                        continue
+
+                    desc = ""
+                    if entry.is_file():
+                        desc += " File: "
+
+                    if entry.is_dir():
+                        desc += " Directory: "
+
+                    desc += entry.name
+                    if entry.is_file():
+                        desc += f" (Size: {os.path.getsize(entry)} bytes)"
+                    buf.append(desc)
+                buf.sort(key=lambda v: v.lower())
+
+                out.append(
+                    f"Listing: {path}\n" + "\n".join(buf) + f"\n({len(buf)} entries)"
+                )
         return "\n\n".join(out)
 
 

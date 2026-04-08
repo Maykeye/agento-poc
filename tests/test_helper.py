@@ -11,9 +11,11 @@ from llm import LLM, LlmInstace, ToolCall
 from typing import Any, Callable, Optional
 import shutil
 
+TMP_PREFIX = "/run/user"
+
 
 def tmpfilename(name: str) -> Path:
-    return Path(f"/run/user/{os.getuid()}/.agento/{name}")
+    return Path(f"{TMP_PREFIX}/{os.getuid()}/.agento/{name}")
 
 
 class TestBase(unittest.TestCase):

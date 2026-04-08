@@ -51,4 +51,6 @@ def real_path(in_project_path: str | Path):
     if path.is_relative_to(project_directory()):
         return path
     else:
-        raise ValueError(f"{in_project_path} is out of bounds of project directory")
+        raise ValueError(
+            f"{in_project_path} is out of bounds of project directory {project_directory()}"
+        )
