@@ -1,62 +1,22 @@
-import unittest
 import json
-import os
-from pathlib import Path
-import shutil
+import unittest
 
-import config
 import tool_editor
-import utilsql
-from context import context, context_handler, ContextMode
+from tool_editor import EditorEntry, ToolEditor
+from context import context_handler
 from llm import LLM, LlmInstace, ToolCall
 
-TMP_PREFIX = "/run/user"
+from tests.test_helper import TestBase
 
 
-def tmpfilename(name: str) -> Path:
-    return Path(f"{TMP_PREFIX}/{os.getuid()}/.agento/{name}")
-
-
-class TestEditorSwitch(unittest.TestCase):
+class TestEditorSwitch(TestBase):
     """Test switching files in editor mode."""
 
-    FILE_FOO = tmpfilename(".test.editor.switch.foo")
-    FILE_BAR = tmpfilename(".test.editor.switch.bar")
-    FILE_BAZ = tmpfilename(".test.editor.switch.baz")
     ID = 1000
-
-    def setUp(self):
-        """Set up test fixtures."""
-        if Path(tmpfilename("")).exists():
-            assert Path(tmpfilename("")).is_dir()
-            shutil.rmtree(tmpfilename(""))
-        Path(tmpfilename("")).mkdir(parents=True, exist_ok=True)
-
-        context.set_context_mode(ContextMode.RAW)
-        os.chdir(tmpfilename(""))
-        config.set_project_directory(tmpfilename(""), silent=True)
-        config.set_logging_sqlite_path(":memory:")
-        utilsql.reset_all_caches()
-        tool_editor.ToolEditor.reset()
-        LLM.INSTANCES.clear()
-
-        # Create test files
-        self.FILE_FOO.write_text("foo\nline2\nline3\n")
-        self.FILE_BAR.write_text("bar\nline2\nline3\n")
-        self.FILE_BAZ.write_text("baz\ncontent\nhere\n")
-
-    def tearDown(self):
-        """Clean up test files."""
-        for f in [self.FILE_FOO, self.FILE_BAR, self.FILE_BAZ]:
-            if f.exists():
-                f.unlink(True)
 
     def init_test_llm(self):
         """Initialize LLM for the test."""
-        dummy_llm = LLM()
-        dummy_llm.INSTANCES.append(LlmInstace(dummy_llm, []))
-        dummy_llm.add_tool(tool_editor.ToolEditor())
-        msgs = dummy_llm.INSTANCES[-1].messages
+        dummy_llm, msgs = self.init_llm_msgs()
         msgs.append(dummy_llm.msg_user("Test editor switch"))
         return dummy_llm, msgs
 
@@ -83,11 +43,10 @@ class TestEditorSwitch(unittest.TestCase):
         # Simulate being in editor mode - set up the state manually
         editor_llm = llm.clone()
         editor_llm.tools.clear()
-        tool_editor.ToolEditor.init_editor_tools(editor_llm)
+        ToolEditor.init_editor_tools(editor_llm)
 
         llm_id = id(editor_llm)
-        tool_editor.ToolEditor._current_lines[llm_id] = 1
-        tool_editor.ToolEditor._editing_files[llm_id] = self.FILE_FOO.name
+        ToolEditor._state[llm_id] = EditorEntry(self.FILE_FOO.name, 1)
 
         # Add editor mode message
         msgs.append(
@@ -126,14 +85,8 @@ class TestEditorSwitch(unittest.TestCase):
         self.assertIn(self.FILE_BAR.name, result)
 
         # Verify the editor state was updated
-        self.assertEqual(
-            tool_editor.ToolEditor._editing_files[llm_id], self.FILE_BAR.name
-        )
-        self.assertEqual(tool_editor.ToolEditor._current_lines[llm_id], 1)
-
-        # Clean up
-        del tool_editor.ToolEditor._current_lines[llm_id]
-        del tool_editor.ToolEditor._editing_files[llm_id]
+        self.assertEqual(ToolEditor._state[llm_id].path, self.FILE_BAR.name)
+        self.assertEqual(ToolEditor._state[llm_id].current_line, 1)
 
     def test_switch_file_nonexistent(self):
         """Test switching to a non-existent file fails gracefully."""
@@ -142,11 +95,10 @@ class TestEditorSwitch(unittest.TestCase):
         # Set up editor mode state
         editor_llm = llm.clone()
         editor_llm.tools.clear()
-        tool_editor.ToolEditor.init_editor_tools(editor_llm)
+        ToolEditor.init_editor_tools(editor_llm)
 
         llm_id = id(editor_llm)
-        tool_editor.ToolEditor._current_lines[llm_id] = 1
-        tool_editor.ToolEditor._editing_files[llm_id] = self.FILE_FOO.name
+        ToolEditor._state[llm_id] = EditorEntry(self.FILE_FOO.name, 1)
 
         LLM.INSTANCES.append(LlmInstace(editor_llm, msgs))
 
@@ -160,29 +112,33 @@ class TestEditorSwitch(unittest.TestCase):
         self.assertIn("does not exist", result["error"])
 
     def test_switch_file_empty(self):
-        """Test switching to an empty file fails gracefully."""
+        """Test switching to an empty file - should now succeed."""
         llm, msgs = self.init_test_llm()
         self.FILE_BAR.write_text("")
 
         # Set up editor mode state
         editor_llm = llm.clone()
         editor_llm.tools.clear()
-        tool_editor.ToolEditor.init_editor_tools(editor_llm)
+        ToolEditor.init_editor_tools(editor_llm)
 
         llm_id = id(editor_llm)
-        tool_editor.ToolEditor._current_lines[llm_id] = 1
-        tool_editor.ToolEditor._editing_files[llm_id] = self.FILE_FOO.name
+        ToolEditor._state[llm_id] = EditorEntry(self.FILE_FOO.name, 1)
 
         LLM.INSTANCES.append(LlmInstace(editor_llm, msgs))
 
-        # Try to switch to empty file
+        # Switch to empty file
         switch_tool = tool_editor.EditorToolSwitchFile()
         result = switch_tool(self.FILE_BAR.name)
 
-        # Should get an error
-        assert isinstance(result, dict), result
-        self.assertIn("error", result)
-        self.assertIn("empty", result["error"])
+        # Should succeed - empty files are now allowed
+        assert isinstance(result, str), result
+        self.assertIn("Switching from", result)
+        self.assertIn(self.FILE_FOO.name, result)
+        self.assertIn(self.FILE_BAR.name, result)
+
+        # Verify the editor state was updated
+        self.assertEqual(ToolEditor._state[llm_id].path, self.FILE_BAR.name)
+        self.assertEqual(ToolEditor._state[llm_id].current_line, 1)
 
     def test_switch_file_not_in_editor_mode(self):
         """Test switching file when not in editor mode fails."""
@@ -195,7 +151,7 @@ class TestEditorSwitch(unittest.TestCase):
         result = switch_tool(self.FILE_BAR.name)
 
         # Should get an error
-        assert isinstance(result, dict), tool_editor.ToolEditor._current_lines
+        assert isinstance(result, dict)
         self.assertIn("error", result)
         self.assertIn("Not in editor mode", result["error"])
 
@@ -206,11 +162,10 @@ class TestEditorSwitch(unittest.TestCase):
         # Set up editor mode state
         editor_llm = llm.clone()
         editor_llm.tools.clear()
-        tool_editor.ToolEditor.init_editor_tools(editor_llm)
+        ToolEditor.init_editor_tools(editor_llm)
 
         llm_id = id(editor_llm)
-        tool_editor.ToolEditor._current_lines[llm_id] = 1
-        tool_editor.ToolEditor._editing_files[llm_id] = self.FILE_FOO.name
+        ToolEditor._state[llm_id] = tool_editor.EditorEntry(self.FILE_FOO.name, 1)
 
         # Add many buffer messages to simulate old buffers
         for i in range(10):

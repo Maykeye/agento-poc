@@ -5,6 +5,7 @@ import json
 
 import config
 import tool_edit_patch
+from tool_editor import ToolEditor
 import tool_io
 import utilsql
 from context import context, context_handler, ContextMode
@@ -40,6 +41,7 @@ class TestBase(unittest.TestCase):
         config.set_project_directory(tmpfilename(""), silent=True)
         config.set_logging_sqlite_path(":memory:")
         utilsql.reset_all_caches()
+        ToolEditor.reset()
         LLM.INSTANCES.clear()
         self.FILE_FOO.write_text("foo\ntext")
         self.FILE_BAR.write_text("bar\nvalue")

@@ -8,6 +8,7 @@ of a file, with specialized tools for navigation, pattern searching, and editing
 import copy
 import json
 import re
+from dataclasses import dataclass
 from typing import Annotated
 
 from config import real_path
@@ -21,6 +22,12 @@ LINES = 250  # Size of buffer (number of lines to show)
 KEEP_OLD_BUFFERS = 5  # Number of buffer prints to keep in messages
 
 
+@dataclass
+class EditorEntry:
+    path: str
+    current_line: int  # 1 indexed
+
+
 class ToolEditor(Tool):
     """
     ToolEditor enters a special editing mode for a file.
@@ -31,16 +38,15 @@ class ToolEditor(Tool):
     - Specialized tools are available for navigation and editing
     """
 
-    # Static storage for tracking current line per LLM instance
-    _current_lines: dict[int, int] = {}  # {id(LLM): current_line (1-indexed)}
-
-    # Static storage for the file being edited
-    _editing_files: dict[int, str] = {}  # {id(LLM): path}
+    _state: dict[int, EditorEntry] = {}  # {id(LLM) -> state }
 
     @staticmethod
-    def reset():
-        ToolEditor._current_lines.clear()
-        ToolEditor._editing_files.clear()
+    def reset(id=None):
+        if id is None:
+            ToolEditor._state.clear()
+        else:
+            if id in ToolEditor._state:
+                del ToolEditor._state[id]
 
     SKIP_PRINTING: bool = False
 
@@ -51,7 +57,7 @@ class ToolEditor(Tool):
 
 This tool enters an interactive editing session where you work with a buffered view of the file.
 Only available within editor mode are:
-Empty files cannot be edited - use write_file instead.""",
+Empty files can be edited - they will be initialized with empty content.""",
         )
 
     @staticmethod
@@ -66,10 +72,12 @@ Empty files cannot be edited - use write_file instead.""",
         llm.add_tool(EditorToolRead())
         llm.add_tool(EditorToolWriteNewContent())
         llm.add_tool(EditorToolFinishEditing())
+        llm.add_tool(EditorToolInsertBefore())
+        llm.add_tool(EditorToolInsertAfter())
 
     def __call__(
         self,
-        path: Annotated[str, "Path to the file to edit (must exist and be non-empty)"],
+        path: Annotated[str, "Path to the file to edit (must exist)"],
     ):
         p = real_path(path)
 
@@ -87,10 +95,9 @@ Empty files cannot be edited - use write_file instead.""",
 
         # Check if file is empty
         if not text.strip():
-            return {
-                "error": f"File {path} is empty",
-                "suggestion": "Use write_file to create content",
-            }
+            # Write empty string to the file to allow editing
+            p.write_text("")
+            text = ""
 
         # Clone the current LLM
         original_llm = LLM.INSTANCES[-1].llm
@@ -107,8 +114,7 @@ Empty files cannot be edited - use write_file instead.""",
 
         # Store current line and file path for this LLM instance
         llm_id = id(editor_llm)
-        ToolEditor._current_lines[llm_id] = 1  # Start from line 1
-        ToolEditor._editing_files[llm_id] = path
+        ToolEditor._state[llm_id] = EditorEntry(path, 1)
 
         # Prepare messages for the editor LLM
         editor_messages = copy.deepcopy(original_messages)
@@ -204,6 +210,8 @@ Current buffer (starting from line 1):"""
             "read_file",
             "write_file",
             "finish_editing",
+            "insert_before",
+            "insert_after",
         }
 
         # Iterate backwards
@@ -230,8 +238,198 @@ Current buffer (starting from line 1):"""
 
 
 # ============================================================================
-# Editor-Specific Tools (to be implemented by subagents)
+# Editor-Specific Tools
 # ============================================================================
+
+
+def _editor_get_current_state():
+    """Get current editor state (llm_id, current_line, path).
+
+    Returns tuple of (llm_id, current_line, path) or raises ValueError if not in editor mode.
+    TODO: replace with _state
+    """
+    if not LLM.INSTANCES:
+        raise ValueError("No LLM instance available")
+
+    llm = LLM.INSTANCES[-1].llm
+    llm_id = id(llm)
+
+    if llm_id not in ToolEditor._state:
+        raise ValueError("Not in editor mode")
+
+    state = ToolEditor._state[llm_id]
+    return llm_id, state.current_line, state.path
+
+
+def _editor_search_pattern(
+    path: str,
+    pattern: str,
+    current_line: int,
+    search_backward: bool,
+) -> tuple[int | None, int | None, str | None, int, int]:
+    """Search for a pattern in file, either forward or backward from current line.
+
+    Args:
+        path: Path to file
+        pattern: Regex pattern to search for
+        current_line: Current line number (1-indexed)
+        search_backward: If True, search backward; if False, search forward
+
+    Returns:
+        Tuple of (match_start, match_end, matched_text, occurrence_num, total_matches)
+        If no match found, returns (None, None, None, 0, total_matches)
+    """
+    p = real_path(path)
+    text = p.read_text()
+    lines = text.splitlines()
+    total_lines = len(lines)
+
+    try:
+        regex = re.compile(pattern, re.MULTILINE)
+    except re.error as e:
+        raise ValueError(f"Invalid regex pattern: {e}")
+
+    # Count total occurrences
+    total_matches = len(list(regex.finditer(text)))
+
+    # Determine search range
+    if search_backward:
+        # Search backward from current_line - 1
+        search_start_idx = current_line - 2
+        search_range = range(search_start_idx, -1, -1)
+    else:
+        # Search forward from current_line + 1
+        search_start_idx = current_line
+        search_range = range(search_start_idx, total_lines)
+
+    # Find match
+    match_found = None
+    for i in search_range:
+        remaining_text = "\n".join(lines[i:])
+        match = regex.search(remaining_text)
+        if match:
+            match_line = i + 1  # Convert to 1-indexed
+            matched_text = match.group()
+            matched_lines = matched_text.count("\n") + 1
+            match_end_line = match_line + matched_lines - 1
+            match_found = (match_line, match_end_line, matched_text)
+            break
+
+    if not match_found:
+        return None, None, None, 0, total_matches
+
+    match_start, match_end, matched_text = match_found
+
+    # Find occurrence number
+    occurrence_num = 0
+    for i, line in enumerate(lines, 1):
+        if regex.search(line):
+            occurrence_num += 1
+            if i >= match_start:
+                break
+
+    return match_start, match_end, matched_text, occurrence_num, total_matches
+
+
+def _editor_find_unique_pattern(path: str, pattern: str) -> tuple[int, int, str, int]:
+    """Find exactly one occurrence of a pattern in the entire file.
+
+    Args:
+        path: Path to file
+        pattern: Text pattern to search for (not regex, plain text)
+
+    Returns:
+        Tuple of (match_start_line, match_end_line, matched_text, total_matches)
+        where lines are 1-indexed.
+
+    Raises:
+        ValueError: If pattern is not found or found multiple times
+    """
+    p = real_path(path)
+    text = p.read_text()
+    lines = text.splitlines()
+
+    # Find all occurrences of the pattern in the file
+    # We need to search for multiline matches
+    matches = []
+    start_idx = 0
+    while True:
+        idx = text.find(pattern, start_idx)
+        if idx == -1:
+            break
+        # Calculate which line this starts on
+        lines_before = text[:idx].count('\n')
+        start_line = lines_before + 1  # 1-indexed
+
+        # Calculate which line this ends on
+        matched_text = pattern
+        end_line = start_line + matched_text.count('\n')
+
+        matches.append((start_line, end_line, matched_text))
+        start_idx = idx + 1
+
+    total_matches = len(matches)
+
+    if total_matches == 0:
+        raise ValueError(
+            f"Pattern '{pattern}' not found in file. "
+            f"Total occurrences: 0"
+        )
+
+    if total_matches > 1:
+        raise ValueError(
+            f"Pattern '{pattern}' found {total_matches} times in file. "
+            f"Must be exactly once."
+        )
+
+    match_start, match_end, matched_text = matches[0]
+    return match_start, match_end, matched_text, total_matches
+
+
+def _editor_format_search_result(
+    path: str,
+    pattern: str,
+    match_start: int,
+    match_end: int,
+    lines: list[str],
+    occurrence_num: int,
+    total_matches: int,
+    llm_id: int,
+) -> str:
+    """Format search result and update editor state.
+
+    Returns formatted output string with matched lines and buffer.
+    """
+    # Format matched lines
+    matched_lines_output = []
+    for i in range(match_start - 1, match_end):
+        line_num = i + 1
+        line_content = lines[i]
+        matched_lines_output.append(f"{line_num:05d}|{line_content}")
+
+    # Update current line
+    new_current_line = max(1, match_start - 5)
+    ToolEditor._state[llm_id].current_line = new_current_line
+
+    # Format output
+    output_lines = []
+    output_lines.append(f"Found pattern '{pattern}':")
+    output_lines.append("")
+    output_lines.extend(matched_lines_output)
+    output_lines.append("")
+    output_lines.append(f"Pattern: {occurrence_num}/{total_matches}")
+    output_lines.append("")
+
+    # Print buffer
+    text = "\n".join(lines)
+    buffer_output = ToolEditor._format_buffer(path, new_current_line, text)
+    output_lines.append(buffer_output)
+
+    # Prune old buffers
+    messages = LLM.INSTANCES[-1].messages
+    ToolEditor._prune_old_buffers(messages)
+
+    return "\n".join(output_lines)
 
 
 class EditorToolPrint(Tool):
@@ -257,20 +455,15 @@ class EditorToolPrint(Tool):
         llm_id = id(llm)
 
         # Get current state
-        if llm_id not in ToolEditor._current_lines:
+        if llm_id not in ToolEditor._state:
             return {"error": "Not in editor mode"}
 
-        if llm_id not in ToolEditor._editing_files:
-            return {"error": "No file being edited"}
-
-        current_line = ToolEditor._current_lines[llm_id]
-        path = ToolEditor._editing_files[llm_id]
-
-        p = real_path(path)
+        state = ToolEditor._state[id(llm)]
+        p = real_path(state.path)
         text = p.read_text()
 
         # Print buffer from current line
-        buffer_output = ToolEditor._format_buffer(path, current_line, text)
+        buffer_output = ToolEditor._format_buffer(state.path, state.current_line, text)
 
         return buffer_output
 
@@ -296,106 +489,36 @@ Then prints buffer and prunes old messages.""",
     def __call__(
         self, pattern: Annotated[str, "Multiline regex pattern to search for"]
     ):
-
-        # Get current LLM instance
-        if not LLM.INSTANCES:
-            return {"error": "No LLM instance available"}
-
-        llm = LLM.INSTANCES[-1].llm
-        llm_id = id(llm)
-
-        # Get current state
-        if llm_id not in ToolEditor._current_lines:
-            return {"error": "Not in editor mode"}
-
-        if llm_id not in ToolEditor._editing_files:
-            return {"error": "No file being edited"}
-
-        current_line = ToolEditor._current_lines[llm_id]
-        path = ToolEditor._editing_files[llm_id]
-
-        p = real_path(path)
-        text = p.read_text()
-        lines = text.splitlines()
-
-        # Compile pattern
         try:
-            regex = re.compile(pattern, re.MULTILINE)
-        except re.error as e:
-            return {"error": f"Invalid regex pattern: {e}"}
+            llm_id, current_line, path = _editor_get_current_state()
+        except ValueError as e:
+            return {"error": str(e)}
 
-        # Search backwards from current_line - 1 (1-indexed, so current_line - 2 in 0-indexed)
-        # We need to find all occurrences first, then find the one before current position
-        search_start_idx = (
-            current_line - 2
-        )  # 0-indexed, starting from line before current
+        match_start, match_end, _, occurrence_num, total_matches = (
+            _editor_search_pattern(path, pattern, current_line, search_backward=True)
+        )
 
-        # Collect all matches before current position
-        matches_before = []
-        for i in range(search_start_idx, -1, -1):
-            # Try to match starting from this line
-            remaining_text = "\n".join(lines[i:])
-            match = regex.search(remaining_text)
-            if match:
-                # Calculate which line the match starts at (1-indexed)
-                match_line = i + 1
-                # Calculate which line the match ends at
-                matched_text = match.group()
-                matched_lines = matched_text.count("\n") + 1
-                match_end_line = match_line + matched_lines - 1
-                matches_before.append((match_line, match_end_line, matched_text))
-                break  # Found the closest match before current line
-
-        # Count total occurrences in entire file
-        total_matches = len(list(regex.finditer(text)))
-
-        if not matches_before:
+        if match_start is None or match_end is None:
             return {
                 "status": "not_found",
                 "message": f"Pattern '{pattern}' not found before line {current_line}",
                 "total_occurrences": total_matches,
             }
 
-        # Get the found match
-        match_start, match_end, matched_text = matches_before[0]
+        p = real_path(path)
+        text = p.read_text()
+        lines = text.splitlines()
 
-        # Find which occurrence this is (count matches up to this point)
-        occurrence_num = 0
-        for i, line in enumerate(lines, 1):
-            if regex.search(line):
-                occurrence_num += 1
-                if i >= match_start:
-                    break
-
-        # Format the matched lines
-        matched_lines_output = []
-        for i in range(match_start - 1, match_end):
-            line_num = i + 1  # 1-indexed
-            line_content = lines[i]
-            matched_lines_output.append(f"{line_num:05d}|{line_content}")
-
-        # Update current line to match_start - 5 (don't wrap to negative)
-        new_current_line = max(1, match_start - 5)
-        ToolEditor._current_lines[llm_id] = new_current_line
-
-        # Format output
-        output_lines = []
-        output_lines.append(f"Found pattern '{pattern}':")
-        output_lines.append("")
-        output_lines.extend(matched_lines_output)
-        output_lines.append("")
-        output_lines.append(f"Pattern: {occurrence_num}/{total_matches}")
-        output_lines.append("")
-
-        # Print buffer from new current line
-        buffer_output = ToolEditor._format_buffer(path, new_current_line, text)
-        output_lines.append(buffer_output)
-
-        # Prune old buffers
-        messages = LLM.INSTANCES[-1].messages
-        ToolEditor._prune_old_buffers(messages)
-
-        return "\n".join(output_lines)
+        return _editor_format_search_result(
+            path,
+            pattern,
+            match_start,
+            match_end,
+            lines,
+            occurrence_num,
+            total_matches,
+            llm_id,
+        )
 
 
 class EditorToolFindNext(Tool):
@@ -419,103 +542,37 @@ Then prints buffer and prunes old messages.""",
     def __call__(
         self, pattern: Annotated[str, "Multiline regex pattern to search for"]
     ):
-        # Get current LLM instance
-        if not LLM.INSTANCES:
-            return {"error": "No LLM instance available"}
-
-        llm = LLM.INSTANCES[-1].llm
-        llm_id = id(llm)
-
-        # Get current state
-        if llm_id not in ToolEditor._current_lines:
-            return {"error": "Not in editor mode"}
-
-        if llm_id not in ToolEditor._editing_files:
-            return {"error": "No file being edited"}
-
-        current_line = ToolEditor._current_lines[llm_id]
-        path = ToolEditor._editing_files[llm_id]
-
-        p = real_path(path)
-        text = p.read_text()
-        lines = text.splitlines()
-        total_lines = len(lines)
-
-        # Compile pattern
         try:
-            regex = re.compile(pattern, re.MULTILINE)
-        except re.error as e:
-            return {"error": f"Invalid regex pattern: {e}"}
+            llm_id, current_line, path = _editor_get_current_state()
+            match_start, match_end, _, occurrence_num, total_matches = (
+                _editor_search_pattern(
+                    path, pattern, current_line, search_backward=False
+                )
+            )
+        except ValueError as e:
+            return {"error": str(e)}
 
-        # Search forwards from current_line + 1 (1-indexed, so current_line in 0-indexed)
-        search_start_idx = current_line  # 0-indexed, starting from line after current
-
-        # Find the next match after current position
-        match_found = None
-        for i in range(search_start_idx, total_lines):
-            # Try to match starting from this line
-            remaining_text = "\n".join(lines[i:])
-            match = regex.search(remaining_text)
-            if match:
-                # Calculate which line the match starts at (1-indexed)
-                match_line = i + 1
-                # Calculate which line the match ends at
-                matched_text = match.group()
-                matched_lines = matched_text.count("\n") + 1
-                match_end_line = match_line + matched_lines - 1
-                match_found = (match_line, match_end_line, matched_text)
-                break
-
-        # Count total occurrences in entire file
-        total_matches = len(list(regex.finditer(text)))
-
-        if not match_found:
+        if match_start is None or match_end is None:
             return {
                 "status": "not_found",
                 "message": f"Pattern '{pattern}' not found after line {current_line}",
                 "total_occurrences": total_matches,
             }
 
-        # Get the found match
-        match_start, match_end, matched_text = match_found
+        p = real_path(path)
+        text = p.read_text()
+        lines = text.splitlines()
 
-        # Find which occurrence this is (count matches up to this point)
-        occurrence_num = 0
-        for i, line in enumerate(lines, 1):
-            if regex.search(line):
-                occurrence_num += 1
-                if i >= match_start:
-                    break
-
-        # Format the matched lines
-        matched_lines_output = []
-        for i in range(match_start - 1, match_end):
-            line_num = i + 1  # 1-indexed
-            line_content = lines[i]
-            matched_lines_output.append(f"{line_num:05d}|{line_content}")
-
-        # Update current line to match_start - 5 (don't wrap to negative)
-        new_current_line = max(1, match_start - 5)
-        ToolEditor._current_lines[llm_id] = new_current_line
-
-        # Format output
-        output_lines = []
-        output_lines.append(f"Found pattern '{pattern}':")
-        output_lines.append("")
-        output_lines.extend(matched_lines_output)
-        output_lines.append("")
-        output_lines.append(f"Pattern: {occurrence_num}/{total_matches}")
-        output_lines.append("")
-
-        # Print buffer from new current line
-        buffer_output = ToolEditor._format_buffer(path, new_current_line, text)
-        output_lines.append(buffer_output)
-
-        # Prune old buffers
-        messages = LLM.INSTANCES[-1].messages
-        ToolEditor._prune_old_buffers(messages)
-
-        return "\n".join(output_lines)
+        return _editor_format_search_result(
+            path,
+            pattern,
+            match_start,
+            match_end,
+            lines,
+            occurrence_num,
+            total_matches,
+            llm_id,
+        )
 
 
 class EditorToolGoto(Tool):
@@ -542,13 +599,10 @@ After goto, old buffer messages are pruned to save context.""",
         llm_id = id(llm)
 
         # Get current state
-        if llm_id not in ToolEditor._current_lines:
+        if llm_id not in ToolEditor._state:
             return {"error": "Not in editor mode"}
 
-        if llm_id not in ToolEditor._editing_files:
-            return {"error": "No file being edited"}
-
-        path = ToolEditor._editing_files[llm_id]
+        path = ToolEditor._state[llm_id].path
 
         p = real_path(path)
         text = p.read_text()
@@ -566,7 +620,7 @@ After goto, old buffer messages are pruned to save context.""",
             }
 
         # Update current line
-        ToolEditor._current_lines[llm_id] = line_number
+        ToolEditor._state[llm_id].current_line = line_number
 
         # Format output with buffer
         output_lines = []
@@ -631,14 +685,11 @@ Example:
         llm_id = id(llm)
 
         # Get current state
-        if llm_id not in ToolEditor._current_lines:
+        if llm_id not in ToolEditor._state:
             return {"error": "Not in editor mode"}
 
-        if llm_id not in ToolEditor._editing_files:
-            return {"error": "No file being edited"}
-
-        current_line = ToolEditor._current_lines[llm_id]
-        path = ToolEditor._editing_files[llm_id]
+        current_line = ToolEditor._state[llm_id].current_line
+        path = ToolEditor._state[llm_id].path
 
         p = real_path(path)
         text = p.read_text()
@@ -747,7 +798,7 @@ Example:
             # Adjust current line if necessary (ensure it's still valid)
             if current_line > new_total_lines:
                 current_line = new_total_lines
-                ToolEditor._current_lines[llm_id] = current_line
+                ToolEditor._state[llm_id].current_line = current_line
 
             # Format success output
             output_lines = []
@@ -812,14 +863,11 @@ Use search_and_replace only for simple, single replacements within visible buffe
         llm_id = id(llm)
 
         # Get current state
-        if llm_id not in ToolEditor._current_lines:
+        if llm_id not in ToolEditor._state:
             return {"error": "Not in editor mode"}
 
-        if llm_id not in ToolEditor._editing_files:
-            return {"error": "No file being edited"}
-
-        current_line = ToolEditor._current_lines[llm_id]
-        path = ToolEditor._editing_files[llm_id]
+        current_line = ToolEditor._state[llm_id].current_line
+        path = ToolEditor._state[llm_id].path
 
         p = real_path(path)
         full_text = p.read_text()
@@ -883,7 +931,7 @@ Use search_and_replace only for simple, single replacements within visible buffe
         # Adjust current line if necessary (ensure it's still valid)
         if current_line > new_total_lines:
             current_line = max(1, new_total_lines)
-            ToolEditor._current_lines[llm_id] = current_line
+            ToolEditor._state[llm_id].current_line = current_line
 
         # Format success output
         output_lines = []
@@ -901,6 +949,194 @@ Use search_and_replace only for simple, single replacements within visible buffe
         ToolEditor._prune_old_buffers(messages)
 
         return "\n".join(output_lines)
+
+
+def _editor_insert_text(
+    path: str,
+    insert_line: int,
+    text_to_insert: str,
+    llm_id: int,
+) -> str:
+    """Insert text at a specific line in the file.
+
+    Args:
+        path: Path to file
+        insert_line: Line number to insert before (1-indexed)
+        text_to_insert: Text to insert (can be multiline)
+        llm_id: LLM instance ID for updating state
+
+    Returns:
+        Formatted output string with confirmation and buffer
+    """
+    p = real_path(path)
+    full_text = p.read_text()
+    full_lines = full_text.splitlines()
+    total_lines = len(full_lines)
+
+    # Validate insert_line
+    if insert_line < 1:
+        insert_line = 1
+    if insert_line > total_lines + 1:
+        insert_line = total_lines + 1
+
+    # Split text to insert into lines
+    insert_lines = text_to_insert.splitlines()
+
+    # Insert the lines
+    # insert_line is 1-indexed, so we insert at index insert_line - 1
+    insert_idx = insert_line - 1
+    new_lines = full_lines[:insert_idx] + insert_lines + full_lines[insert_idx:]
+
+    # Write updated content
+    new_text = "\n".join(new_lines)
+    if full_text and not full_text.endswith('\n'):
+        # Preserve no-trailing-newline if original didn't have it
+        new_text = new_text.rstrip('\n')
+    elif full_text.endswith('\n') and insert_lines:
+        # Ensure trailing newline if original had it
+        new_text = new_text + '\n'
+
+    write_tool = ToolWriteFile()
+    write_result = write_tool(path, new_text)
+
+    if isinstance(write_result, dict) and "error" in write_result:
+        return write_result
+
+    # Read updated file to get new content
+    updated_text = p.read_text()
+    updated_lines = updated_text.splitlines()
+    new_total_lines = len(updated_lines)
+
+    # Get current line before updating
+    current_line = ToolEditor._state[llm_id].current_line
+
+    # Adjust current line if necessary (shift if we inserted before it)
+    lines_added = len(insert_lines)
+    if insert_line <= current_line:
+        current_line += lines_added
+
+    # Ensure current line is still valid
+    if current_line > new_total_lines:
+        current_line = new_total_lines
+    if current_line < 1:
+        current_line = 1
+
+    ToolEditor._state[llm_id].current_line = current_line
+
+    # Format success output
+    output_lines = []
+    output_lines.append(f"Inserted {len(insert_lines)} line(s) at line {insert_line}")
+    output_lines.append("")
+
+    # Print buffer from current line
+    buffer_output = ToolEditor._format_buffer(path, current_line, updated_text)
+    output_lines.append(buffer_output)
+
+    # Prune old buffers
+    messages = LLM.INSTANCES[-1].messages
+    ToolEditor._prune_old_buffers(messages)
+
+    return "\n".join(output_lines)
+
+
+class EditorToolInsertBefore(Tool):
+    """Insert text before a pattern in the file."""
+
+    def __init__(self):
+        super().__init__(
+            name="insert_before",
+            description="""Insert text before the first line of a pattern match.
+
+FINDS the text-to-find in the entire file. Must find exactly one occurrence.
+- 0 occurrences => error
+- >1 occurrences => error
+
+Then inserts text-to-insert BEFORE the first line of the match.
+Supports multiline patterns and multiline insert text.
+
+Example:
+  insert_before "LINE102" "Line101.5"
+  inserts "Line101.5" on the line before "LINE102"
+""",
+        )
+
+    def __call__(
+        self,
+        text_to_find: Annotated[str, "Text to find (must exist exactly once in file)"],
+        text_to_insert: Annotated[str, "Text to insert before the match"],
+    ):
+        # Get current LLM instance
+        if not LLM.INSTANCES:
+            return {"error": "No LLM instance available"}
+
+        llm = LLM.INSTANCES[-1].llm
+        llm_id = id(llm)
+
+        # Get current state
+        if llm_id not in ToolEditor._state:
+            return {"error": "Not in editor mode"}
+
+        path = ToolEditor._state[llm_id].path
+
+        try:
+            match_start, match_end, matched_text, total_matches = (
+                _editor_find_unique_pattern(path, text_to_find)
+            )
+        except ValueError as e:
+            return {"error": str(e)}
+
+        # Insert before the match (at match_start line)
+        return _editor_insert_text(path, match_start, text_to_insert, llm_id)
+
+
+class EditorToolInsertAfter(Tool):
+    """Insert text after a pattern in the file."""
+
+    def __init__(self):
+        super().__init__(
+            name="insert_after",
+            description="""Insert text after the last line of a pattern match.
+
+FINDS the text-to-find in the entire file. Must find exactly one occurrence.
+- 0 occurrences => error
+- >1 occurrences => error
+
+Then inserts text-to-insert AFTER the last line of the match.
+Supports multiline patterns and multiline insert text.
+
+Example:
+  insert_after "LINE102" "Line102.5"
+  inserts "Line102.5" on the line after "LINE102"
+""",
+        )
+
+    def __call__(
+        self,
+        text_to_find: Annotated[str, "Text to find (must exist exactly once in file)"],
+        text_to_insert: Annotated[str, "Text to insert after the match"],
+    ):
+        # Get current LLM instance
+        if not LLM.INSTANCES:
+            return {"error": "No LLM instance available"}
+
+        llm = LLM.INSTANCES[-1].llm
+        llm_id = id(llm)
+
+        # Get current state
+        if llm_id not in ToolEditor._state:
+            return {"error": "Not in editor mode"}
+
+        path = ToolEditor._state[llm_id].path
+
+        try:
+            match_start, match_end, matched_text, total_matches = (
+                _editor_find_unique_pattern(path, text_to_find)
+            )
+        except ValueError as e:
+            return {"error": str(e)}
+
+        # Insert after the match (at match_end + 1 line)
+        return _editor_insert_text(path, match_end + 1, text_to_insert, llm_id)
 
 
 class EditorToolRead(Tool):
@@ -922,7 +1158,7 @@ All edit commands after read_file will apply to the file that was edited before 
         if isinstance(result, str):
             llm = LLM.INSTANCES[-1].llm
             llm_id = id(llm)
-            current_path = ToolEditor._editing_files[llm_id]
+            current_path = ToolEditor._state[llm_id].path
             result += f"\n\nNote: still editing {current_path}"
 
         return result
@@ -939,8 +1175,9 @@ class EditorToolSwitchFile(Tool):
 This tool allows you to switch to a new file without exiting editor mode.
 
 REQUIREMENTS:
-- The new file must exist and be non-empty
+- The new file must exist
 - After switching, the editor continues with the new file starting from line 1
+- Empty files will be initialized with empty content
 
 Use this when you need to edit other file from the current one quckly, but it's preferrably to finish_editing and in report state what needs to be edited.""",
         )
@@ -954,7 +1191,7 @@ Use this when you need to edit other file from the current one quckly, but it's 
         llm_id = id(llm)
 
         # Check if we're in editor mode
-        if llm_id not in ToolEditor._editing_files:
+        if llm_id not in ToolEditor._state:
             return {"error": "Not in editor mode"}
 
         # Validate the new file
@@ -977,19 +1214,17 @@ Use this when you need to edit other file from the current one quckly, but it's 
 
         # Check if file is empty
         if not new_text.strip():
-            return {
-                "error": f"File {path} is empty",
-                "suggestion": "Use write_file to add content first",
-            }
+            # Write empty string to the file to allow editing
+            p.write_text("")
+            new_text = ""
 
         # Prune old buffers if we exceed KEEP_OLD_BUFFERS
         messages = LLM.INSTANCES[-1].messages
         ToolEditor._prune_old_buffers(messages)
 
         # Update editing state to the new file
-        old_file = ToolEditor._editing_files[llm_id]
-        ToolEditor._editing_files[llm_id] = path
-        ToolEditor._current_lines[llm_id] = 1  # Reset to line 1
+        old_file = ToolEditor._state[llm_id]
+        ToolEditor._state[llm_id] = EditorEntry(path, 1)
 
         # Format output
         output_lines = []
@@ -1044,10 +1279,10 @@ The editor will exit and return control to the main LLM.""",
         llm_id = id(llm)
 
         # Get current state
-        if llm_id not in ToolEditor._editing_files:
+        if llm_id not in ToolEditor._state:
             return {"error": "No file being edited"}
 
-        current_editing_path = ToolEditor._editing_files[llm_id]
+        current_editing_path = ToolEditor._state[llm_id].path
 
         # Validate that the provided path matches the currently editing file
         provided_path = real_path(path)
@@ -1070,10 +1305,7 @@ The editor will exit and return control to the main LLM.""",
             return result
 
         # Clean up editor state
-        if llm_id in ToolEditor._current_lines:
-            del ToolEditor._current_lines[llm_id]
-        if llm_id in ToolEditor._editing_files:
-            del ToolEditor._editing_files[llm_id]
+        ToolEditor.reset(llm_id)
 
         # Return FinishGeneration to stop the editor LLM and return to main LLM
         result_value = {
@@ -1111,16 +1343,13 @@ The report can describe what changes were made or what was observed.""",
         llm_id = id(llm)
 
         # Get current state
-        if llm_id not in ToolEditor._editing_files:
+        if llm_id not in ToolEditor._state:
             return {"error": "No file being edited"}
 
-        path = ToolEditor._editing_files[llm_id]
+        path = ToolEditor._state[llm_id].path
 
         # Clean up editor state
-        if llm_id in ToolEditor._current_lines:
-            del ToolEditor._current_lines[llm_id]
-        if llm_id in ToolEditor._editing_files:
-            del ToolEditor._editing_files[llm_id]
+        ToolEditor.reset(llm_id)
 
         # Return FinishGeneration to stop the editor LLM and return to main LLM
         result_value = {

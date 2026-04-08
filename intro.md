@@ -34,6 +34,7 @@ Example: `assert isinstance(result, dict)`
 
 - Use FILE_FOO as primary test file unless specified the other.
 - If you need the second file(e.g. empty file), use FILE_BAR and write content there
+- If you create new test file (saved as tests/test_xxx.py), add it to the list in intro.md
 
 ### Context tests
 
@@ -51,6 +52,8 @@ Example: `assert isinstance(result, dict)`
 
 #### Editor mode test
 - tests/test_editor.py
+- tests/test_editor_switch.py
+- tests/test_editor_insert.py
 
 #### Tests for more advanced tools from tool_io
 - tests/test_fold.py
@@ -58,6 +61,6 @@ Example: `assert isinstance(result, dict)`
 - tests/test_ls.py
 </FILES_INFO>
 
-- For editing files please use edit_file
+- For editing and or fixing files please use edit_file
 - When you create a file, in the end add it to git
 </INTRO>
