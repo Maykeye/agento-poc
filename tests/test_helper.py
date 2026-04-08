@@ -6,6 +6,7 @@ import json
 import config
 import tool_edit_patch
 import tool_io
+import utilsql
 from context import context, context_handler, ContextMode
 from llm import LLM, LlmInstace, ToolCall
 from typing import Any, Callable, Optional
@@ -37,6 +38,8 @@ class TestBase(unittest.TestCase):
         context.set_context_mode(ContextMode.RAW)
         os.chdir(tmpfilename(""))
         config.set_project_directory(tmpfilename(""), silent=True)
+        config.set_logging_sqlite_path(":memory:")
+        utilsql.reset_all_caches()
         LLM.INSTANCES.clear()
         self.FILE_FOO.write_text("foo\ntext")
         self.FILE_BAR.write_text("bar\nvalue")

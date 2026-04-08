@@ -6,7 +6,8 @@ from context.context import context_handler
 from llm import LLM
 import tool_fork
 import tool_editor
-from utils import log_prompt, expand_file
+from utils import expand_file
+from utilsql import log_prompt
 import config
 import tool_io
 import tool_edit_patch

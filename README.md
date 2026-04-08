@@ -29,7 +29,8 @@ Files can contain extra commands at the start of the line (@ must be the first c
 * "@#" the commentary (ignored)
 * "@done" stops parsing commands from this point and all lines starting with `@` are appended as usual lines
 
-Example can be seen in ./tests/manual_test_fork.md 
+Example can be seen in ./tests/manual_test_fork.md, ./tests/manual_test_editor.md
+(To launch in I symlinked `main.py` into `~/bin/agento`)
 
 ## Context mode 
 

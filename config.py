@@ -3,6 +3,9 @@ from pathlib import Path
 PROJECT_DIRECTORY_ = Path("<THE PROJECT DIRECTORY IS NOT SET>")
 """ Home project directory, a "root" of the project """
 
+LOGGING_SQLITE_PATH_ = Path("~/.local/state/agento.log").expanduser()
+""" SQLite database path for logging stuff """
+
 
 def set_project_directory(project: str | Path, silent=False):
     """Setup project directory (will be resolved to absolute, expanduser() yaself)"""
@@ -14,6 +17,17 @@ def set_project_directory(project: str | Path, silent=False):
 
 def project_directory():
     return PROJECT_DIRECTORY_
+
+
+def logging_sqlite_path():
+    """Get the SQLite database path for logging"""
+    return LOGGING_SQLITE_PATH_
+
+
+def set_logging_sqlite_path(path: str | Path):
+    """Set the SQLite database path for logging"""
+    global LOGGING_SQLITE_PATH_
+    LOGGING_SQLITE_PATH_ = Path(path)
 
 
 def guess_project_language():

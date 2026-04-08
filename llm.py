@@ -7,9 +7,10 @@ import os
 import requests
 import sys
 import traceback
-from utils import name_tag
+from utils import name_tag, debug_print
 from tool import Tool
 from context import context_handler
+import utilsql
 import datetime
 
 
@@ -80,6 +81,8 @@ class LLM:
         self.tools_indentation = 1
         self.callback = LLMVerbose()
         self.tool_calls_id = []
+        self.llm_id = utilsql.llm_id()
+        self.last_tool_call_num: Optional[int] = None
 
     def clone(self):
         # TODO: copy or not callback?
@@ -221,6 +224,12 @@ class LLM:
                     f">>>{self.name_tag()} FUNC: {call.function[:32]} ARGS: `{call.arguments[:200]}`"
                 )
                 self.tool_calls_id.append(call.id)
+
+                # Log generation before calling tool to get history_id
+                self.last_tool_call_num = utilsql.log_generation(
+                    utilsql.prompt_id(), self.llm_id, messages
+                )
+
                 try:
                     args = json.loads(call.arguments)
                     result = tool_callback(**args)  # type: ignore

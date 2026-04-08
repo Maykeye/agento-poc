@@ -1,6 +1,7 @@
 from pathlib import Path
 import subprocess
 from typing import Optional
+import utilsql
 
 import config
 
@@ -72,25 +73,13 @@ def extract_tag(text: str, tag: str, strip=True) -> str:
     return text.strip() if strip else text
 
 
-def log_prompt(project, prompt):
-    """Log used prompt for the project"""
-    import sqlite3
-    import datetime
-
-    p = Path("~/.local/state/agento.log").expanduser()
-    now = datetime.datetime.now(datetime.UTC).isoformat()
-    with sqlite3.connect(p) as sql:
-        sql.execute(
-            "CREATE TABLE IF NOT EXISTS log(project TEXT NOT NULL, log TEXT NOT NULL, created_at TEXT NOT NULL)"
-        )
-        sql.execute("CREATE INDEX IF NOT EXISTS log_proj_idx ON log(project)")
-        sql.execute(
-            "INSERT INTO log(project, log, created_at) VALUES(?,?,?)",
-            (project, prompt, now),
-        )
-
-
 def name_tag(id, _cache={}):
     if id not in _cache:
         _cache[id] = f"q{len(_cache)+1:x}"
     return _cache[id]
+
+
+def debug_print(*args, **kwargs):
+    """Debug print function. Passes all args to print.
+    Can be easily disabled later by replacing with a no-op function."""
+    print(*args, **kwargs)

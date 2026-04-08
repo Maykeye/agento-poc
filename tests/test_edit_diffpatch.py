@@ -1,7 +1,7 @@
 from context import context_handler
 from context import set_context_mode, ContextMode
 from llm import LLM, LlmInstace
-from tests.test_helper import TestBase, tmpfilename
+from tests.test_helper import TestBase
 import tool_edit_patch
 import unittest
 
@@ -626,6 +626,153 @@ class TestDiffPatch(TestBase):
         # Should report failure to find all hunks due to overlapping matches
         error_msg = self.get_error_message(result)
         self.assertIn("could not find all hunks", error_msg)
+
+    def test_edit_diff_patch_failed_logging(self):
+        """Test that failed patches are logged to the database with correct history_id.
+
+        When a patch fails, it should be logged to patch_fail table with history_id
+        that corresponds to the tool call that generated it, not the max num from
+        generation_history.
+        """
+        import utilsql
+
+        # Create file with content
+        self.FILE_FOO.write_text("line1\nline2\nline3\n")
+
+        # Initialize LLM and messages
+        dummy_llm, msgs = self.init_llm_msgs()
+        context_handler().prepare_current_llm(dummy_llm)
+        msgs.append(dummy_llm.msg_user("Apply two patches"))
+
+        # First tool call - prepare messages
+        msgs.append(dummy_llm.msg_assistant("First patch"))
+
+        # Simulate tool call by setting last_tool_call_num
+        # This simulates what LLM._generate does before calling tool
+        dummy_llm.last_tool_call_num = utilsql.log_generation(
+            utilsql.prompt_id(), dummy_llm.llm_id, msgs
+        )
+        first_call_history_id = dummy_llm.last_tool_call_num
+
+        # Apply first broken patch (will fail)
+        bad_patch1 = f"""--- a/{self.FILE_FOO.name}
++++ b/{self.FILE_FOO.name}
+@@ -1,3 +1,3 @@
+-wrong content
++correct content"""
+
+        result1 = tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, bad_patch1)
+        self.assertIn("error", str(result1))
+
+        # Second tool call - prepare messages
+        msgs.append(dummy_llm.msg_assistant("Second patch"))
+
+        # Simulate tool call by setting last_tool_call_num
+        # This should be a new history_id but we'll use the SAME value
+        # to test that the patch is linked to this call, not the previous one
+        dummy_llm.last_tool_call_num = utilsql.log_generation(
+            utilsql.prompt_id(), dummy_llm.llm_id, msgs
+        )
+        second_call_history_id = dummy_llm.last_tool_call_num
+
+        # Apply second broken patch (will fail)
+        bad_patch2 = f"""--- a/{self.FILE_FOO.name}
++++ b/{self.FILE_FOO.name}
+@@ -1,3 +1,3 @@
+-also wrong
++also correct"""
+
+        result2 = tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, bad_patch2)
+        self.assertIn("error", str(result2))
+
+        # Verify both patches are in the database
+        with utilsql.sql_db() as db:
+            # Check that both patches exist
+            rows = db.execute(
+                "SELECT history_id, orig, patch FROM patch_fail"
+            ).fetchall()
+
+            # We should have 2 failed patches
+            self.assertEqual(len(rows), 2)
+
+            # First patch should be linked to first_call_history_id
+            first_patch_logged = [r for r in rows if r[0] == first_call_history_id]
+            self.assertEqual(len(first_patch_logged), 1)
+            self.assertIn(
+                "wrong content", first_patch_logged[0][2]
+            )  # patch contains "wrong content"
+
+            # Second patch should be linked to second_call_history_id
+            second_patch_logged = [r for r in rows if r[0] == second_call_history_id]
+            self.assertEqual(len(second_patch_logged), 1)
+            self.assertIn(
+                "also wrong", second_patch_logged[0][2]
+            )  # patch contains "also wrong"
+
+            # Verify they are different history_ids
+            self.assertNotEqual(first_call_history_id, second_call_history_id)
+
+    def test_edit_diff_patch_failed_same_call(self):
+        """Test that two failed patches in the same call use the same history_id.
+
+        If LLM calls two patches at the same time and both fail, both should
+        be linked to the same tool call history_id.
+        """
+        import utilsql
+
+        # Create file with content
+        self.FILE_FOO.write_text("line1\nline2\nline3\n")
+
+        # Initialize LLM and messages
+        dummy_llm, msgs = self.init_llm_msgs()
+        context_handler().prepare_current_llm(dummy_llm)
+        msgs.append(dummy_llm.msg_user("Apply two patches at once"))
+
+        # Simulate a single tool call with last_tool_call_num set
+        # This simulates what happens when multiple tool calls happen in the same generation
+        msgs.append(dummy_llm.msg_assistant("Applying patches"))
+        dummy_llm.last_tool_call_num = utilsql.log_generation(
+            utilsql.prompt_id(), dummy_llm.llm_id, msgs
+        )
+        call_history_id = dummy_llm.last_tool_call_num
+
+        # Apply first broken patch
+        bad_patch1 = f"""--- a/{self.FILE_FOO.name}
++++ b/{self.FILE_FOO.name}
+@@ -1,3 +1,3 @@
+-wrong content
++correct content"""
+
+        result1 = tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, bad_patch1)
+        self.assertIn("error", str(result1))
+
+        # Apply second broken patch (same call, same history_id)
+        bad_patch2 = f"""--- a/{self.FILE_FOO.name}
++++ b/{self.FILE_FOO.name}
+@@ -1,3 +1,3 @@
+-also wrong
++also correct"""
+
+        result2 = tool_edit_patch.ToolEditDiffPatch()(self.FILE_FOO.name, bad_patch2)
+        self.assertIn("error", str(result2))
+
+        # Verify both patches are in the database with the SAME history_id
+        with utilsql.sql_db() as db:
+            rows = db.execute(
+                "SELECT history_id, orig, patch FROM patch_fail"
+            ).fetchall()
+
+            # We should have 2 failed patches
+            self.assertEqual(len(rows), 2)
+
+            # Both patches should be linked to the same history_id
+            patches_with_id = [r for r in rows if r[0] == call_history_id]
+            self.assertEqual(len(patches_with_id), 2)
+
+            # Verify both patches are present
+            patches_text = [r[2] for r in patches_with_id]
+            self.assertTrue(any("wrong content" in p for p in patches_text))
+            self.assertTrue(any("also wrong" in p for p in patches_text))
 
 
 if __name__ == "__main__":
