@@ -162,7 +162,9 @@ def _parse_patch_hunks(patch: str) -> list[dict]:
             # Parse hunk body into old_lines and new_lines
             old_lines = []
             new_lines = []
-            deletion_lines = []  # Track which lines are deletions (for overlap checking)
+            deletion_lines = (
+                []
+            )  # Track which lines are deletions (for overlap checking)
             has_operations = False  # Track if hunk has any + or - lines
 
             for line in hunk_body_lines:
@@ -198,20 +200,18 @@ def _parse_patch_hunks(patch: str) -> list[dict]:
     return hunks
 
 
-def _has_overlapping_matches(
-    orig_lines: list[str], pattern: list[str]
-) -> bool:
+def _has_overlapping_matches(orig_lines: list[str], pattern: list[str]) -> bool:
     """Check if pattern has overlapping matches in orig_lines.
-    
+
     Two matches are considered overlapping if they share any lines.
     Returns True if there are multiple matches that overlap.
     """
     if not pattern:
         return False
-    
+
     pattern_len = len(pattern)
     matches: list[int] = []
-    
+
     for i in range(len(orig_lines) - pattern_len + 1):
         match = True
         for j, line in enumerate(pattern):
@@ -220,13 +220,13 @@ def _has_overlapping_matches(
                 break
         if match:
             matches.append(i)
-    
+
     # Check for overlapping matches
     for i in range(len(matches) - 1):
         # Two matches at positions m1 and m2 overlap if m2 < m1 + pattern_len
         if matches[i + 1] < matches[i] + pattern_len:
             return True
-    
+
     return False
 
 

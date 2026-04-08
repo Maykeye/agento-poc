@@ -31,6 +31,13 @@ class ToolCall:
 
 
 @dataclass
+class FinishGeneration:
+    """Special return type to stop generation loop and return value to caller."""
+
+    value: str
+
+
+@dataclass
 class Response:
     content: str
     reasoning_content: str
@@ -225,11 +232,30 @@ class LLM:
                 else:
                     print("Warning: tool call id mismatch", file=sys.stderr)
 
-                if isinstance(result, (list, dict)):
-                    result = json.dumps(
-                        result, ensure_ascii=False, indent=self.tools_indentation
+                def normalize_response(value):
+                    if isinstance(value, (list, dict)):
+                        value = json.dumps(
+                            value, ensure_ascii=False, indent=self.tools_indentation
+                        )
+                    return value
+
+                # Check if tool returned FinishGeneration to stop the loop
+                if isinstance(result, FinishGeneration):
+                    # Add the FinishGeneration.value as tool response
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": call.id,
+                            "name": call.function,
+                            "content": normalize_response(result.value),
+                        }
+                    )
+                    # Return response with the FinishGeneration value as content
+                    return Response(
+                        content=result.value, reasoning_content="", tool_calls=[]
                     )
 
+                result = normalize_response(result)
                 assert isinstance(
                     result, str
                 ), f"{type(result)} while str expected in {call}"

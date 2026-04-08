@@ -255,7 +255,7 @@ class ToolRmDir(Tool):
 class ToolEditFile(Tool):
     def __init__(self):
         super().__init__(
-            "edit_file",
+            "search_replace_once",
             "Edit existing file. Finds `replace_from` and replaces the it with `replace_with`. Exactly one instance of `replace_from` must exist or error will occur",
         )
 

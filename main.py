@@ -5,6 +5,7 @@ from typing import Optional
 from context.context import context_handler
 from llm import LLM
 import tool_fork
+import tool_editor
 from utils import log_prompt, expand_file
 import config
 import tool_io
@@ -59,10 +60,12 @@ class AgencyNode:
         llm.add_tool(tool_io.ToolWriteFile())
         llm.add_tool(tool_io.ToolEditFile())
         llm.add_tool(tool_edit_patch.ToolEditDiffPatch())
+        llm.add_tool(tool_editor.ToolEditor())
         llm.add_tool(tool_io.ToolDeleteFile())
         llm.add_tool(tool_io.ToolMkDir())
         llm.add_tool(tool_io.ToolRmDir())
         llm.add_tool(tool_sh.ToolGitAdd())
+        llm.add_tool(tool_io.ToolAppend())
         if self.lang == "rust":
             llm.add_tool(tool_sh.ToolCargoAdd())
 
