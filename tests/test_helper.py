@@ -9,10 +9,11 @@ import tool_io
 from context import context, context_handler, ContextMode
 from llm import LLM, LlmInstace, ToolCall
 from typing import Any, Callable, Optional
+import shutil
 
 
 def tmpfilename(name: str) -> Path:
-    return Path(f"/run/user/{os.getuid()}/{name}")
+    return Path(f"/run/user/{os.getuid()}/.agento/{name}")
 
 
 class TestBase(unittest.TestCase):
@@ -27,6 +28,10 @@ class TestBase(unittest.TestCase):
         return dummy_llm, msgs
 
     def setUp(self):
+        if Path(tmpfilename("")).exists():
+            assert Path(tmpfilename("")).is_dir()
+            shutil.rmtree(tmpfilename(""))
+        Path(tmpfilename("")).mkdir(parents=True, exist_ok=True)
         context.set_context_mode(ContextMode.RAW)
         os.chdir(tmpfilename(""))
         self.tearDown()

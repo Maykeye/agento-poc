@@ -11,7 +11,7 @@ from tool import Tool, run_executable
 
 
 class ToolEditDiffPatch(Tool):
-    SKIP_SAVING_INVALID_PATCHES = False
+    SKIP_SAVING_INVALID_PATCHES: bool = False
 
     def __init__(self):
         super().__init__(
