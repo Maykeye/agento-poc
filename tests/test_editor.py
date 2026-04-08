@@ -429,7 +429,9 @@ class TestEditorWriteNewContent(TestEditorBase):
         llm_id = self.init_editor_llm()
 
         write_tool = tool_editor.EditorToolWriteNewContent()
-        result = write_tool(new_content="completely new content")
+        result = write_tool(
+            path=self.FILE_TEST.name, new_content="completely new content"
+        )
 
         # Should return FinishGeneration (not dict)
         assert isinstance(result, FinishGeneration)
@@ -448,6 +450,52 @@ class TestEditorWriteNewContent(TestEditorBase):
         # Editor state should be cleaned up
         self.assertNotIn(llm_id, ToolEditor._current_lines)
         self.assertNotIn(llm_id, ToolEditor._editing_files)
+
+    def test_write_new_content_path_mismatch(self):
+        """Test that write_new_content rejects mismatched paths."""
+        llm_id = self.init_editor_llm()
+        write_tool = tool_editor.EditorToolWriteNewContent()
+        result = write_tool(path=self.FILE_BAR.name, new_content="new content")
+
+        # Should return error dict with path mismatch
+        assert isinstance(result, dict)
+        self.assertIn("error", result)
+        self.assertIn("Path mismatch", result["error"])
+        self.assertDictHasKeyContains("suggestion", result, "You are editing")
+        self.assertIn(self.FILE_TEST.name, result["suggestion"])
+        self.assertIn(self.FILE_BAR.name, result["suggestion"])
+
+        # Editor state should NOT be cleaned up
+        self.assertIn(llm_id, ToolEditor._current_lines)
+        self.assertIn(llm_id, ToolEditor._editing_files)
+
+        # File should NOT be updated
+        content = self.FILE_TEST.read_text()
+        self.assertNotIn("new content", content)
+
+    def test_write_new_content_relative_path(self):
+        """Test that write_new_content works with relative paths."""
+        self.init_editor_llm()
+
+        write_tool = tool_editor.EditorToolWriteNewContent()
+
+        # Use relative path (should resolve to same file)
+        result = write_tool(
+            path=".agento.editor.test", new_content="relative path content"
+        )
+
+        # Should return FinishGeneration (not dict)
+        assert isinstance(result, FinishGeneration)
+
+        # Parse the FinishGeneration value (it's JSON)
+        result_value = json.loads(result.value)
+
+        # Check result value
+        self.assertEqual(result_value["status"], "success")
+
+        # File should be updated
+        content = self.FILE_TEST.read_text()
+        self.assertEqual(content, "relative path content")
 
 
 class TestEditorFinishEditing(TestEditorBase):
@@ -599,7 +647,7 @@ class TestEditorQuitBehavior(TestEditorBase):
 
         # Call write_new_content (returns FinishGeneration)
         write_tool = tool_editor.EditorToolWriteNewContent()
-        result = write_tool(new_content="new content")
+        result = write_tool(path=self.FILE_TEST.name, new_content="new content")
 
         # Should return FinishGeneration
         self.assertIsInstance(result, FinishGeneration)

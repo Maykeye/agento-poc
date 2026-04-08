@@ -928,9 +928,14 @@ class EditorToolWriteNewContent(Tool):
             description="""Write the complete new content to the current file and exit editing mode.
 
 This tool:
-1. Writes the entire new_content to the file being edited (replacing all existing content)
-2. Exits editor mode
-3. Returns a result indicating success
+1. Validates that the provided path matches the currently editing file
+2. Writes the entire new_content to the file (replacing all existing content)
+3. Exits editor mode
+4. Returns a result indicating success
+
+REQUIREMENTS:
+- path: Must match the file currently being edited in editor mode
+- new_content: Complete new content to write (replaces all existing content)
 
 Use this when you want to completely replace the file content with new content.
 The editor will exit and return control to the main LLM.""",
@@ -938,6 +943,10 @@ The editor will exit and return control to the main LLM.""",
 
     def __call__(
         self,
+        path: Annotated[
+            str,
+            "Path to the file to write to (must match the file currently being edited)",
+        ],
         new_content: Annotated[
             str,
             "Complete new content to write to the file (replaces all existing content)",
@@ -954,7 +963,21 @@ The editor will exit and return control to the main LLM.""",
         if llm_id not in ToolEditor._editing_files:
             return {"error": "No file being edited"}
 
-        path = ToolEditor._editing_files[llm_id]
+        current_editing_path = ToolEditor._editing_files[llm_id]
+
+        # Validate that the provided path matches the currently editing file
+        provided_path = real_path(path)
+        editing_path = real_path(current_editing_path)
+
+        # Normalize paths for comparison (resolve to absolute paths)
+        if provided_path != editing_path:
+            return {
+                "error": f"Path mismatch",
+                "suggestion": f"You are editing '{current_editing_path}' but tried to write to '{path}'. Use the correct path or use finish_editing() to exit and write_file() for a different file.",
+                "editing_file": current_editing_path,
+                "requested_path": path,
+            }
+
         write_tool = ToolWriteFile()
         result = write_tool(path, new_content)
 
