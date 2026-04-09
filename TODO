@@ -2,9 +2,3 @@
 - command @tool-read fakes sending read command (after which true response is appended)
 - Editor/patch: ensure header is a/ and b/ either through documentation or force
 
-  FIX?
-"""
-The regex is matching "operations" in the docstring. Let me search with a better pattern:
-
-{"pattern":"\\b_current_lines\\b|\\b_editing_files\\b"}
-"""

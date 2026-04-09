@@ -308,7 +308,11 @@ def _editor_search_pattern(
         remaining_text = "\n".join(lines[i:])
         match = regex.search(remaining_text)
         if match:
-            match_line = i + 1  # Convert to 1-indexed
+            # Calculate the actual line where the match occurs within remaining_text
+            # Count newlines before the match position to find the line offset
+            match_start_pos = match.start()
+            lines_before_match = remaining_text[:match_start_pos].count("\n")
+            match_line = i + 1 + lines_before_match  # Convert to 1-indexed
             matched_text = match.group()
             matched_lines = matched_text.count("\n") + 1
             match_end_line = match_line + matched_lines - 1
@@ -347,7 +351,6 @@ def _editor_find_unique_pattern(path: str, pattern: str) -> tuple[int, int, str,
     """
     p = real_path(path)
     text = p.read_text()
-    lines = text.splitlines()
 
     # Find all occurrences of the pattern in the file
     # We need to search for multiline matches
@@ -358,12 +361,12 @@ def _editor_find_unique_pattern(path: str, pattern: str) -> tuple[int, int, str,
         if idx == -1:
             break
         # Calculate which line this starts on
-        lines_before = text[:idx].count('\n')
+        lines_before = text[:idx].count("\n")
         start_line = lines_before + 1  # 1-indexed
 
         # Calculate which line this ends on
         matched_text = pattern
-        end_line = start_line + matched_text.count('\n')
+        end_line = start_line + matched_text.count("\n")
 
         matches.append((start_line, end_line, matched_text))
         start_idx = idx + 1
@@ -371,10 +374,7 @@ def _editor_find_unique_pattern(path: str, pattern: str) -> tuple[int, int, str,
     total_matches = len(matches)
 
     if total_matches == 0:
-        raise ValueError(
-            f"Pattern '{pattern}' not found in file. "
-            f"Total occurrences: 0"
-        )
+        raise ValueError(f"Pattern '{pattern}' not found in file. Total occurrences: 0")
 
     if total_matches > 1:
         raise ValueError(
@@ -989,18 +989,18 @@ def _editor_insert_text(
 
     # Write updated content
     new_text = "\n".join(new_lines)
-    if full_text and not full_text.endswith('\n'):
+    if full_text and not full_text.endswith("\n"):
         # Preserve no-trailing-newline if original didn't have it
-        new_text = new_text.rstrip('\n')
-    elif full_text.endswith('\n') and insert_lines:
+        new_text = new_text.rstrip("\n")
+    elif full_text.endswith("\n") and insert_lines:
         # Ensure trailing newline if original had it
-        new_text = new_text + '\n'
+        new_text = new_text + "\n"
 
     write_tool = ToolWriteFile()
     write_result = write_tool(path, new_text)
 
     if isinstance(write_result, dict) and "error" in write_result:
-        return write_result
+        return write_result  # type: ignore
 
     # Read updated file to get new content
     updated_text = p.read_text()

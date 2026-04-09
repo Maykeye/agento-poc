@@ -52,8 +52,9 @@ Example: `assert isinstance(result, dict)`
 
 #### Editor mode test
 - tests/test_editor.py
-- tests/test_editor_switch.py
+- tests/test_editor_find.py
 - tests/test_editor_insert.py
+- tests/test_editor_switch.py
 
 #### Tests for more advanced tools from tool_io
 - tests/test_fold.py
@@ -63,4 +64,5 @@ Example: `assert isinstance(result, dict)`
 
 - For editing and or fixing files please use edit_file
 - When you create a file, in the end add it to git
+- For debug printing do "from utils import debug_print" which passes arguments to print as is but is easy to grep.
 </INTRO>
