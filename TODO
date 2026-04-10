@@ -1,3 +1,4 @@
+- command @query workspace topic --- ask anythingllm 
 - command @assistant fake assistant message
 - command @tool-read fakes sending read command (after which true response is appended)
 - Editor/patch: ensure header is a/ and b/ either through documentation or force

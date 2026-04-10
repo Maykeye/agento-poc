@@ -116,8 +116,10 @@ class TestEditorFormatBuffer(TestEditorBase):
 
         self.assertIn("[FILE: test.txt", buffer)
         self.assertIn("00001|line1", buffer)
-        self.assertIn("00002|line2", buffer)
         self.assertIn("00003|line3", buffer)
+        
+        # Line 2 should NOT have a line number (not first, not last, not divisible by 10)
+        self.assertIn("     |line2", buffer)
 
     def test_format_buffer_from_middle(self):
         """Test formatting buffer starting from middle of file."""
@@ -125,10 +127,12 @@ class TestEditorFormatBuffer(TestEditorBase):
         buffer = ToolEditor._format_buffer("test.txt", 3, text)
 
         self.assertIn("00003|line3", buffer)
-        self.assertIn("00004|line4", buffer)
         self.assertIn("00005|line5", buffer)
         self.assertNotIn("00001|line1", buffer)
         self.assertNotIn("00002|line2", buffer)
+        
+        # Line 4 should NOT have a line number (not first, not last, not divisible by 10)
+        self.assertIn("     |line4", buffer)
 
     def test_format_buffer_respects_line_limit(self):
         """Test that buffer respects LINES limit."""
@@ -161,9 +165,14 @@ class TestEditorPrintBuffer(TestEditorBase):
         # Should show line 1 with 00001 prefix
         self.assertIn("00001|line 1", result)
 
-        # Should show subsequent lines
-        self.assertIn("00002|line 2", result)
-        self.assertIn("00003|line 3", result)
+        # Line 10 should have a line number (divisible by 10)
+        self.assertIn("00010|line 9", result)
+        
+        # Lines 2-9 should NOT have line numbers (not first, not last, not divisible by 10)
+        self.assertIn("     |line 2", result)
+        self.assertIn("     |line 3", result)
+        self.assertIn("     |line 6", result)
+        self.assertIn("     |line 7", result)
 
 
 class TestEditorGoto(TestEditorBase):

@@ -166,6 +166,10 @@ Current buffer (starting from line 1):"""
         """Format a buffer view of the file starting from start_line (1-indexed).
 
         Returns formatted text with line numbers.
+        Line numbers are shown only for:
+        - First line of buffer
+        - Last line of buffer
+        - Lines divisible by 10
         """
         lines = full_text.splitlines()
         total_lines = len(lines)
@@ -178,7 +182,16 @@ Current buffer (starting from line 1):"""
         for i in range(start_line - 1, end_line):
             line_num = i + 1  # Convert to 1-indexed
             line_content = lines[i]
-            buffer_lines.append(f"{line_num:05d}|{line_content}")
+            
+            # Determine if we should show the line number
+            is_first_line = (i == start_line - 1)
+            is_last_line = (i == end_line - 1)
+            is_divisible_by_10 = (line_num % 10 == 0)
+            
+            if is_first_line or is_last_line or is_divisible_by_10:
+                buffer_lines.append(f"{line_num:05d}|{line_content}")
+            else:
+                buffer_lines.append(f"     |{line_content}")
 
         # Add file info at the top
         info = f"[FILE: {path} | LINES: {start_line}-{end_line}/{total_lines}]"
