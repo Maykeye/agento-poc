@@ -15,7 +15,7 @@ from config import real_path
 from llm import LLM, FinishGeneration
 from tool import Tool
 from tool_edit_patch import ToolEditDiffPatch
-from tool_io import ToolWriteFile, ToolReadFile
+from tool_io import ToolAppend, ToolWriteFile, ToolReadFile
 
 # Constants
 LINES = 250  # Size of buffer (number of lines to show)
@@ -71,6 +71,7 @@ Empty files can be edited - they will be initialized with empty content.""",
         llm.add_tool(EditorToolSwitchFile())
         llm.add_tool(EditorToolRead())
         llm.add_tool(EditorToolWriteNewContent())
+        llm.add_tool(EditorToolAppend())
         llm.add_tool(EditorToolFinishEditing())
         llm.add_tool(EditorToolInsertBefore())
         llm.add_tool(EditorToolInsertAfter())
@@ -182,12 +183,12 @@ Current buffer (starting from line 1):"""
         for i in range(start_line - 1, end_line):
             line_num = i + 1  # Convert to 1-indexed
             line_content = lines[i]
-            
+
             # Determine if we should show the line number
-            is_first_line = (i == start_line - 1)
-            is_last_line = (i == end_line - 1)
-            is_divisible_by_10 = (line_num % 10 == 0)
-            
+            is_first_line = i == start_line - 1
+            is_last_line = i == end_line - 1
+            is_divisible_by_10 = line_num % 10 == 0
+
             if is_first_line or is_last_line or is_divisible_by_10:
                 buffer_lines.append(f"{line_num:05d}|{line_content}")
             else:
@@ -1328,6 +1329,66 @@ The editor will exit and return control to the main LLM.""",
             "lines_written": len(new_content.splitlines()),
         }
         return FinishGeneration(value=json.dumps(result_value, indent=1))
+
+
+class EditorToolAppend(Tool):
+    """Write new content to the current file and exit editing mode."""
+
+    def __init__(self):
+        super().__init__(
+            name="append_to_file",
+            description="""Append text to the end of the file.
+
+This tool:
+1. Validates that the provided path matches the currently editing file
+2. Writes the entire `text` at the end of the file (replacing all existing content)
+
+REQUIREMENTS:
+- path: Must match the file currently being edited in editor mode, as only editing it is allowed.
+- text: Text to write
+
+Use this when you want to append new content to the end of the file.""",
+        )
+
+    def __call__(
+        self,
+        path: Annotated[
+            str,
+            "Path to the file to write to (must match the file currently being edited)",
+        ],
+        text: Annotated[
+            str,
+            "Complete new content to write to the file (replaces all existing content)",
+        ],
+    ):
+        # Get current LLM instance
+        if not LLM.INSTANCES:
+            return {"error": "No LLM instance available"}
+
+        llm = LLM.INSTANCES[-1].llm
+        llm_id = id(llm)
+
+        # Get current state
+        if llm_id not in ToolEditor._state:
+            return {"error": "No file being edited"}
+
+        current_editing_path = ToolEditor._state[llm_id].path
+
+        # Validate that the provided path matches the currently editing file
+        provided_path = real_path(path)
+        editing_path = real_path(current_editing_path)
+
+        # Normalize paths for comparison (resolve to absolute paths)
+        if provided_path != editing_path:
+            return {
+                "error": f"Path mismatch",
+                "suggestion": f"You are editing '{current_editing_path}' but tried to append to '{path}'. Use the correct path or use finish_editing() to exit and write_file() for a different file.",
+                "editing_file": current_editing_path,
+                "requested_path": path,
+            }
+
+        append_tool = ToolAppend()
+        return append_tool(path, text)
 
 
 class EditorToolFinishEditing(Tool):

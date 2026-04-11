@@ -1,5 +1,9 @@
+from pathlib import Path
+from typing import ContextManager, Optional
 import unittest
 
+from context.context import set_context_mode
+from context.context_handler import ContextMode
 from llm import LLM, LlmInstace, FinishGeneration
 import tool_editor
 from tool_editor import EditorEntry, ToolEditor, LINES, KEEP_OLD_BUFFERS
@@ -82,6 +86,7 @@ line 9"""
         main_llm.INSTANCES.append(LlmInstace(main_llm, []))
         main_msgs = main_llm.INSTANCES[-1].messages
         main_msgs.append(main_llm.msg_user("Test editor operations"))
+        self.tool_call_read(self.FILE_TEST)
 
         # Create editor LLM (simulating what ToolEditor.__call__ does)
         editor_llm = main_llm.clone()
@@ -95,7 +100,7 @@ line 9"""
         ToolEditor._state[llm_id] = EditorEntry(self.FILE_TEST.name, 1)
 
         # Prepare messages
-        editor_msgs = [
+        editor_msgs = main_llm.messages() + [
             main_llm.msg_system("Editor mode system"),
             main_llm.msg_user(f"Editing {self.FILE_TEST.name}"),
         ]
@@ -117,7 +122,7 @@ class TestEditorFormatBuffer(TestEditorBase):
         self.assertIn("[FILE: test.txt", buffer)
         self.assertIn("00001|line1", buffer)
         self.assertIn("00003|line3", buffer)
-        
+
         # Line 2 should NOT have a line number (not first, not last, not divisible by 10)
         self.assertIn("     |line2", buffer)
 
@@ -130,7 +135,7 @@ class TestEditorFormatBuffer(TestEditorBase):
         self.assertIn("00005|line5", buffer)
         self.assertNotIn("00001|line1", buffer)
         self.assertNotIn("00002|line2", buffer)
-        
+
         # Line 4 should NOT have a line number (not first, not last, not divisible by 10)
         self.assertIn("     |line4", buffer)
 
@@ -167,7 +172,7 @@ class TestEditorPrintBuffer(TestEditorBase):
 
         # Line 10 should have a line number (divisible by 10)
         self.assertIn("00010|line 9", result)
-        
+
         # Lines 2-9 should NOT have line numbers (not first, not last, not divisible by 10)
         self.assertIn("     |line 2", result)
         self.assertIn("     |line 3", result)
@@ -341,6 +346,41 @@ class TestEditorPatchCurrentFile(TestEditorBase):
         self.assertDictHasKeyContains("error", result, "overlap")
 
 
+class TestEditorAppend(TestEditorBase):
+    """Test append_file"""
+
+    def find_read(self, p: Path, llm: Optional[LLM] = None):
+        llm = llm or LLM.INSTANCES[-1].llm
+        for i in range(len(llm.messages()) - 1, -1, -1):
+            msg = llm.messages()[i]
+            if msg.get("role") != "tool":
+                continue
+            if not (content := msg.get("content")):
+                continue
+            line = content.splitlines()[0]
+            if f"CTX-IO-FILE: {p.name}" in line:
+                return i, msg
+        return -1, {}
+
+    def impl(self, orig_sfx: str):
+        set_context_mode(ContextMode.SUFFIX)
+        self.FILE_TEST.write_text(f"hello\nworld{orig_sfx}")
+        self.init_editor_llm()
+        self.tool_call_editor_append(self.FILE_TEST, "and autumn")
+        self.epilogue()
+        text = self.FILE_TEST.read_text()
+        self.assertEqual(text, "hello\nworld\nand autumn")
+        _, msg = self.find_read(self.FILE_TEST)
+        self.assertIn("hello\nworld\nand autumn", msg["content"])
+        self.assertEqual(len(LLM.INSTANCES), 2)
+
+    def test_nl(self):
+        self.impl("\n")
+
+    def test_no_nl(self):
+        self.impl("")
+
+
 class TestEditorWriteNewContent(TestEditorBase):
     """Test write_new_content functionality."""
 
@@ -490,8 +530,8 @@ class TestEditorPruneBuffers(TestEditorBase):
             if m.get("role") == "tool" and "PRUNED" in m.get("content", "")
         ]
 
-        # Should have 3 pruned outputs
-        self.assertEqual(len(pruned), 3)
+        # 3 reads here + 1 in init_editor_llm
+        self.assertEqual(len(pruned), 4)
 
 
 class TestToolEditorMain(TestEditorBase):

@@ -6,6 +6,7 @@ import json
 import config
 import tool_edit_patch
 from tool_editor import ToolEditor
+import tool_editor
 import tool_io
 import utilsql
 from context import context, context_handler, ContextMode
@@ -256,6 +257,25 @@ class TestBase(unittest.TestCase):
         )
         res = tool_io.ToolUnfoldAll()(path.name)
         return self.append_tool_call_result("file_unfold_all", msgs, res)
+
+    def tool_call_editor_append(self, path: Path, text: str) -> Any:
+        context_handler().prepare_current_llm(LLM.INSTANCES[-1].llm)
+        self.ID += 1
+        msgs = LLM.INSTANCES[-1].messages
+        msgs.append(
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    ToolCall(
+                        function="append_to_file",
+                        arguments=json.dumps({"path": path.name, "text": text}),
+                        id=f"id{self.ID}",
+                    ).llm_func_call_info()
+                ],
+            }
+        )
+        res = tool_editor.EditorToolAppend()(path.name, text)
+        return self.append_tool_call_result("append_to_file", msgs, res)
 
     def tool_call_with_check(
         self,
