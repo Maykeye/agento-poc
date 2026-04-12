@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import ContextManager, Optional
+from typing import Optional
 import unittest
 
 from context.context import set_context_mode
@@ -537,14 +537,13 @@ class TestEditorPruneBuffers(TestEditorBase):
 class TestToolEditorMain(TestEditorBase):
     """Test the main ToolEditor class."""
 
+    @unittest.skip("Mock generate NYI")
     def test_editor_file_not_exists(self):
         """Test starting editor with non-existent file."""
         editor = ToolEditor()
         result = editor(path="nonexistent_file.txt")
-
-        self.assertIsInstance(result, dict)
-        self.assertIn("error", result)
-        self.assertDictHasKeyContains("error", result, "does not exist")
+        self.assertEqual(Path("nonexistent_file.txt").read_text(), "\n")
+        self.assertNotIn("error", result)
 
     @unittest.skip("Mock generate NYI")
     def test_editor_empty_file(self):
@@ -560,12 +559,8 @@ class TestToolEditorMain(TestEditorBase):
 
             editor = ToolEditor()
             result = editor(path=empty_file.name)
-
-            # Should succeed - empty files are now allowed
-            self.assertIsInstance(result, dict)
-            self.assertIn("status", result)
-            self.assertEqual(result["status"], "editing_complete")
-            self.assertIn("file", result)
+            self.assertEqual(empty_file.read_text(), "\n")
+            self.assertNotIn("error", result)
         finally:
             if empty_file.exists():
                 empty_file.unlink()

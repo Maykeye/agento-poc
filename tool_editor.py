@@ -29,15 +29,6 @@ class EditorEntry:
 
 
 class ToolEditor(Tool):
-    """
-    ToolEditor enters a special editing mode for a file.
-
-    When editing mode is entered:
-    - A new LLM is cloned with only editor-specific tools
-    - The file is displayed in a buffer starting from current line
-    - Specialized tools are available for navigation and editing
-    """
-
     _state: dict[int, EditorEntry] = {}  # {id(LLM) -> state }
 
     @staticmethod
@@ -56,8 +47,7 @@ class ToolEditor(Tool):
             description="""Start editing a file in special editor mode.
 
 This tool enters an interactive editing session where you work with a buffered view of the file.
-Only available within editor mode are:
-Empty files can be edited - they will be initialized with empty content.""",
+Empty or non-existing files can be edited - they will be initialized with empty content.""",
         )
 
     @staticmethod
@@ -83,12 +73,8 @@ Empty files can be edited - they will be initialized with empty content.""",
         p = real_path(path)
 
         if not p.exists():
-            return {
-                "error": f"File {path} does not exist",
-                "suggestion": "Use write_file to create a new file",
-            }
-
-        if not p.is_file():
+            p.write_text("")
+        elif not p.is_file():
             return {"error": f"{path} is not a file"}
 
         # Read file content
@@ -1096,6 +1082,7 @@ Example:
             match_start, match_end, matched_text, total_matches = (
                 _editor_find_unique_pattern(path, text_to_find)
             )
+            del (match_end, matched_text, total_matches)
         except ValueError as e:
             return {"error": str(e)}
 
@@ -1146,6 +1133,7 @@ Example:
             match_start, match_end, matched_text, total_matches = (
                 _editor_find_unique_pattern(path, text_to_find)
             )
+            del (match_start, matched_text, total_matches)
         except ValueError as e:
             return {"error": str(e)}
 

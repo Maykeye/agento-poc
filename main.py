@@ -58,11 +58,12 @@ class AgencyNode:
         llm.add_tool(tool_rpg.ToolRollVersus())
 
     def _llm_editing(self, llm: LLM):
-        llm.add_tool(tool_io.ToolWriteFile())
-        llm.add_tool(tool_io.ToolEditFile())
-        llm.add_tool(tool_edit_patch.ToolEditDiffPatch())
+        # llm.add_tool(tool_io.ToolWriteFile())
+        # llm.add_tool(tool_io.ToolEditFile())
+        # llm.add_tool(tool_edit_patch.ToolEditDiffPatch())
         llm.add_tool(tool_editor.ToolEditor())
         llm.add_tool(tool_io.ToolDeleteFile())
+        llm.add_tool(tool_io.ToolRename())
         llm.add_tool(tool_io.ToolMkDir())
         llm.add_tool(tool_io.ToolRmDir())
         llm.add_tool(tool_sh.ToolGitAdd())
