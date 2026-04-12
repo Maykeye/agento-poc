@@ -140,3 +140,24 @@ class ContextHandler(ABC):
         """
         del (path, text)
         return visible_line
+
+    def rename_file(
+        self, path_src: str, path_dst: str, llm: Optional[LlmProto] = None
+    ) -> str | dict:
+        """Handle file rename in context.
+
+        Base implementation raises NotImplementedError.
+        Override in each context handler to implement rename logic.
+
+        Args:
+            path_src: Source file path
+            path_dst: Destination file path
+            llm: Optional LLM instance for updating messages (suffix mode)
+
+        Returns:
+            Success message or error dict
+        """
+        del (path_src, path_dst, llm)
+        raise NotImplementedError(
+            f"Rename operations not supported in {self.mode().value} context mode"
+        )

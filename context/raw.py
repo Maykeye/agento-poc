@@ -1,9 +1,9 @@
 from context.context_handler import ContextHandler
-from typing import override
+from typing import override, Optional
 from pathlib import Path
 
 import config
-from context.context_handler import ContextMode
+from context.context_handler import ContextMode, LlmProto
 
 
 class RawHandler(ContextHandler):
@@ -35,3 +35,22 @@ class RawHandler(ContextHandler):
     @override
     def mode(self):
         return ContextMode.RAW
+
+    @override
+    def rename_file(
+        self, path_src: str, path_dst: str, llm: Optional[LlmProto] = None
+    ) -> str | dict:
+        """Handle file rename in raw context mode.
+
+        Raw mode doesn't track context, so rename returns a simple success message.
+
+        Args:
+            path_src: Source file path
+            path_dst: Destination file path
+            llm: Optional LLM instance (not used in raw mode)
+
+        Returns:
+            Success message
+        """
+        del llm  # Not used in raw mode
+        return f">>> OK: rename_file from {path_src} to {path_dst}"

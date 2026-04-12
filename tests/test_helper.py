@@ -71,6 +71,25 @@ class TestBase(unittest.TestCase):
         res = tool_io.ToolReadFile()(path.name)
         return self.append_tool_call_result("read_file", msgs, res)
 
+    def tool_call_rename(self, src: Path, dst: Path) -> Any:
+        context_handler().prepare_current_llm(LLM.INSTANCES[-1].llm)
+        self.ID += 1
+        msgs = LLM.INSTANCES[-1].messages
+        msgs.append(
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    ToolCall(
+                        function="rename_file",
+                        arguments=json.dumps({"src": src.name, "dst": dst.name}),
+                        id=f"id{self.ID}",
+                    ).llm_func_call_info()
+                ],
+            }
+        )
+        res = tool_io.ToolRename()(src.name, dst.name)
+        return self.append_tool_call_result("rename_file", msgs, res)
+
     def tool_call_write(self, path: Path, text: str) -> Any:
         context_handler().prepare_current_llm(LLM.INSTANCES[-1].llm)
         self.ID += 1

@@ -527,3 +527,38 @@ class ToolUnfoldAll(Tool):
 
         result = handler.unfold_all(path)
         return result
+
+
+class ToolRename(Tool):
+    def __init__(self):
+        super().__init__(
+            "rename_file",
+            "Rename a file from path_src to path_dst. Checks that path_src exists and is a file (not directory), and that path_dst does not exist.",
+        )
+
+    def __call__(
+        self,
+        path_src: Annotated[str, "Source file path (must exist and be a file, not directory)"],
+        path_dst: Annotated[str, "Destination file path (must not exist)"],
+    ):
+        from config import real_path
+        from context import llm_instance
+
+        p_src = real_path(path_src)
+        p_dst = real_path(path_dst)
+
+        # Check that path_src exists and is a file (not directory)
+        if not p_src.exists():
+            return {path_src: "error", "error": f"Source file {path_src} doesn't exist"}
+        if not p_src.is_file():
+            return {path_src: "error", "error": f"Source path {path_src} is not a file"}
+
+        # Check that path_dst does not exist
+        if p_dst.exists():
+            return {path_dst: "error", "error": f"Destination path {path_dst} already exists"}
+
+        # Perform the rename
+        p_src.rename(p_dst)
+
+        # Update context with LLM for suffix mode message updates
+        return context_handler().rename_file(path_src, path_dst, llm_instance())

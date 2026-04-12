@@ -1,5 +1,5 @@
 from context.context_handler import ContextHandler
-from typing import override
+from typing import override, Optional
 
 from context.context_handler import ContextMode, ContextEntry, LlmProto
 
@@ -68,3 +68,31 @@ class PrefixHandler(ContextHandler):
                 f"=== Path: {ctx.path} (last id: {ctx.id}; last operation: {ctx.operation}) CONTEXT END ===\n"
             ]
         return "\n".join(res).rstrip()
+
+    @override
+    def rename_file(
+        self, path_src: str, path_dst: str, llm: Optional[LlmProto] = None
+    ) -> str | dict:
+        """Handle file rename in prefix context mode.
+
+        If path_src exists in CONTEXTS, update its path to path_dst.
+        Returns a success message.
+
+        Args:
+            path_src: Source file path
+            path_dst: Destination file path
+            llm: Optional LLM instance (not used in prefix mode)
+
+        Returns:
+            Success message
+        """
+        del llm  # Not used in prefix mode
+
+        # Update CONTEXTS if path_src exists
+        if path_src in CONTEXTS:
+            entry = CONTEXTS[path_src]
+            # Remove old entry and create new one with new path
+            del CONTEXTS[path_src]
+            CONTEXTS[path_dst] = ContextEntry(path_dst, entry.text, entry.id, "rename_file")
+
+        return f">>> OK: rename_file from {path_src} to {path_dst}"

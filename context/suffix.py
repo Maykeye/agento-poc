@@ -1,5 +1,5 @@
 from context.context_handler import ContextHandler
-from typing import override
+from typing import override, Optional
 
 import config
 from context.context_handler import ContextMode, ContextEntry, LlmProto
@@ -601,3 +601,101 @@ class SuffixHandler(ContextHandler):
                 return actual_line
 
         return actual_line
+
+    @override
+    def rename_file(self, path_src: str, path_dst: str, llm: Optional[LlmProto] = None) -> str | dict:
+        """Handle file rename in suffix context mode.
+
+        This method:
+        1. Moves context entry from path_src to path_dst
+        2. Updates all messages referencing path_src to reference path_dst
+
+        Args:
+            path_src: Source file path
+            path_dst: Destination file path
+            llm: Optional LLM instance for updating messages
+
+        Returns:
+            Success message
+        """
+        # Move context entry from path_src to path_dst
+        if path_src in SUFFIX_CONTEXTS:
+            entry = SUFFIX_CONTEXTS[path_src]
+            del SUFFIX_CONTEXTS[path_src]
+            # Create new entry with new path but same content
+            ContextEntry.last_id += 1
+            new_id = f"CTX({ContextEntry.last_id})"
+            SUFFIX_CONTEXTS[path_dst] = ContextEntry(
+                path_dst, entry.text, new_id, "rename_file"
+            )
+
+        # Update LLM messages if llm is provided
+        if llm is not None:
+            self._update_rename_messages(llm.messages(), path_src, path_dst)
+
+        # Return success message
+        return f">>> OK: rename_file from {path_src} to {path_dst}"
+
+    def _update_rename_messages(self, messages: list[dict], path_src: str, path_dst: str):
+        """Update all messages (inputs and outputs) to reference path_dst instead of path_src after rename.
+
+        Args:
+            messages: List of message dictionaries
+            path_src: Source file path (old name)
+            path_dst: Destination file path (new name)
+        """
+        import re
+        import json
+
+        # Get the new context ID for path_dst (created in rename_file)
+        new_ctx_id = None
+        if path_dst in SUFFIX_CONTEXTS:
+            new_ctx_id = SUFFIX_CONTEXTS[path_dst].id
+
+        # Iterate through all messages
+        for msg in messages:
+            content = msg.get("content", "")
+            if not isinstance(content, str):
+                continue
+
+            # Update tool output messages - replace path references in CTX-IO-FILE
+            pfx = re.escape(self.prefix)
+            
+            # Pattern to match the full header with path_src
+            pattern = rf"({pfx}\s*ID:\s*CTX\((\d+)\)\s+OPERATION:\s+(\w+)\s+)CTX-IO-FILE:\s+{re.escape(path_src)}"
+            
+            def replace_with_new_path_and_id(match):
+                """Replace path_src with path_dst and update context ID if needed."""
+                prefix_part = match.group(1)
+                ctx_num = match.group(2)
+                operation = match.group(3)
+                new_id = new_ctx_id if new_ctx_id else f"CTX({ctx_num})"
+                return f"{pfx} ID: {new_id} OPERATION: {operation} CTX-IO-FILE: {path_dst}"
+            
+            new_content = re.sub(pattern, replace_with_new_path_and_id, content)
+            if new_content != content:
+                msg["content"] = new_content
+
+            # Update tool call arguments (assistant messages with tool_calls)
+            tool_calls = msg.get("tool_calls", [])
+            if tool_calls:
+                for tool_call in tool_calls:
+                    func_info = tool_call.get("function", {})
+                    func_name = func_info.get("name", "")
+                    try:
+                        args = json.loads(func_info.get("arguments", "{}"))
+                        # Check if path argument references path_src
+                        if args.get("path", "") == path_src:
+                            args["path"] = path_dst
+                            func_info["arguments"] = json.dumps(args)
+                        # Check if src argument references path_src (for rename_file)
+                        if args.get("src", "") == path_src:
+                            args["src"] = path_dst
+                            func_info["arguments"] = json.dumps(args)
+                        # Check if dst argument references path_src (for rename_file second rename)
+                        if args.get("dst", "") == path_src:
+                            args["dst"] = path_dst
+                            func_info["arguments"] = json.dumps(args)
+
+                    except (json.JSONDecodeError, TypeError):
+                        pass

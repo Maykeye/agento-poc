@@ -25,8 +25,10 @@ Sql utilities are stored in `utilsql.py`
 # Tests
 
 - Please create all test classes based on TestBase from tests/test_helper.py
-- instead of self.assertIsInstance(var, type) use assert isinstance. 
+- instead of self.assertIsInstance(var, type) use assert isinstance.
+- Use self.assertEqual, self.assertIn etc for other tests
 Example: `assert isinstance(result, dict)`
+Example: `self.assertEqual(result["status"], "ok")`
 
 ## Tests for tools
 

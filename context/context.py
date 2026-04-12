@@ -22,3 +22,9 @@ _CONTEXT_HANDLER: ContextHandler = RawHandler()
 
 def context_handler():
     return _CONTEXT_HANDLER
+
+
+def llm_instance():
+    """Get the current LLM instance."""
+    from llm import LLM
+    return LLM.INSTANCES[-1].llm if LLM.INSTANCES else None
