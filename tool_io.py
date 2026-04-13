@@ -152,7 +152,8 @@ class ToolAppend(Tool):
         text: Annotated[str, "New content to append"],
     ):
         write = ToolWriteFile()
-        old_text = real_path(path).read_text().removesuffix("\n")
+        p = real_path(path)
+        old_text = p.read_text().removesuffix("\n") if p.exists() else ""
         full_text = old_text + "\n" + text.removeprefix("\n")
         return write(path, full_text)
 
@@ -538,7 +539,9 @@ class ToolRename(Tool):
 
     def __call__(
         self,
-        path_src: Annotated[str, "Source file path (must exist and be a file, not directory)"],
+        path_src: Annotated[
+            str, "Source file path (must exist and be a file, not directory)"
+        ],
         path_dst: Annotated[str, "Destination file path (must not exist)"],
     ):
         from config import real_path
@@ -555,7 +558,10 @@ class ToolRename(Tool):
 
         # Check that path_dst does not exist
         if p_dst.exists():
-            return {path_dst: "error", "error": f"Destination path {path_dst} already exists"}
+            return {
+                path_dst: "error",
+                "error": f"Destination path {path_dst} already exists",
+            }
 
         # Perform the rename
         p_src.rename(p_dst)
