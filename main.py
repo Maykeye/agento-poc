@@ -78,6 +78,7 @@ class AgencyNode:
             llm.add_tool(tool_io.ToolUnfoldAll())
 
     def _llm_reading(self, llm: LLM):
+        llm.add_tool(tool_io.ToolCloseFile())
         llm.add_tool(tool_io.ToolReadFile())
         llm.add_tool(tool_io.ToolLs())
         if self.lang == "rust":
