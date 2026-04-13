@@ -49,14 +49,14 @@ Note. If you are a subagent, don't fork your task.
             instructions = json.loads(instructions)
 
         # Get the current LLM and messages
-        llm = LLM.INSTANCES[-1].llm.clone()
 
         original_messages = LLM.INSTANCES[-1].messages
         assert original_messages, "Messages must have tool call"
-        assert llm.tool_calls_id, "tool calls must exist"
+        assert LLM.INSTANCES[-1].llm.tool_calls_id, "tool calls must exist"
         result = []
 
         for instruction in instructions:
+            llm = LLM.INSTANCES[-1].llm.clone()
             fork_messages = copy.deepcopy(original_messages)
 
             # Remove the parent's tool call from the clone's memory

@@ -279,7 +279,7 @@ class LLM:
         return out
 
     def name_tag(self):
-        return "".join([name_tag(x.llm) for x in LLM.INSTANCES])
+        return "".join([name_tag(id(x.llm)) for x in LLM.INSTANCES])
 
     def messages(self):
         assert self.INSTANCES
