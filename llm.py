@@ -93,6 +93,7 @@ class LLM:
         return msgs
 
     # TODO: split class to test/mock it easier
+    # TODO: split callbacks better so all these extra stuff of functions/Response are separate
     def generate(self, messages: list[dict]) -> Response:
         if messages[0]["role"] != "system":
             raise ValueError("Call messages = llm.prepend_system_message(messages)")
@@ -197,9 +198,8 @@ class LLM:
         if finish_reason == "tool_calls":
             for call in res.tool_calls:
                 tool_callback = self.tools[call.function]
-                print(
-                    f">>>{self.name_tag()} FUNC: {call.function[:32]} ARGS: `{call.arguments[:200]}`"
-                )
+                pfx = f">>>{self.name_tag()} {LLMVerbose.TOOL_CALL}FUNC:{LLMVerbose.RESET}"
+                print(f">>>{pfx} {call.function[:32]} ARGS: `{call.arguments[:200]}`")
                 self.tool_calls_id.append(call.id)
 
                 # Log generation before calling tool to get history_id
