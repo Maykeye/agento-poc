@@ -54,3 +54,22 @@ class RawHandler(ContextHandler):
         """
         del llm  # Not used in raw mode
         return f">>> OK: rename_file from {path_src} to {path_dst}"
+
+    @override
+    def close_file(
+        self, path: str, reason: str, llm: Optional[LlmProto] = None
+    ) -> str | dict:
+        """Handle file close in raw context mode.
+
+        Raw mode doesn't track context, so close_file is a NOP.
+
+        Args:
+            path: File path to close
+            reason: Reason for closing the file
+            llm: Optional LLM instance (not used in raw mode)
+
+        Returns:
+            Success message
+        """
+        del (reason, llm)  # Not used in raw mode
+        return f">>> OK: close_file {path}"

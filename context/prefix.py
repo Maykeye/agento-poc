@@ -96,3 +96,28 @@ class PrefixHandler(ContextHandler):
             CONTEXTS[path_dst] = ContextEntry(path_dst, entry.text, entry.id, "rename_file")
 
         return f">>> OK: rename_file from {path_src} to {path_dst}"
+
+    @override
+    def close_file(
+        self, path: str, reason: str, llm: Optional[LlmProto] = None
+    ) -> str | dict:
+        """Handle file close in prefix context mode.
+
+        Removes the file from CONTEXTS.
+
+        Args:
+            path: File path to close
+            reason: Reason for closing the file
+            llm: Optional LLM instance (not used in prefix mode)
+
+        Returns:
+            Success message
+        """
+        del reason  # Not used in prefix mode
+        del llm  # Not used in prefix mode
+
+        # Remove from CONTEXTS if exists
+        if path in CONTEXTS:
+            del CONTEXTS[path]
+
+        return f">>> OK: close_file {path}"

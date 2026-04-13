@@ -209,6 +209,31 @@ class ToolDeleteFile(Tool):
         p.unlink()
         return context_handler().update(path, "(file deleted)", "delete_file")
 
+class ToolCloseFile(Tool):
+    def __init__(self):
+        super().__init__(
+            "close_file",
+            "Close a file that was previously opened/read. Removes it from active context or marks it as closed with a reason. Use this when you're done with a file to free up context space.",
+        )
+
+    def __call__(
+        self,
+        file: Annotated[str, "Path to the file to close"],
+        reason: Annotated[str, "Reason for closing the file (e.g., 'done editing', 'no longer needed')"],
+    ):
+        """Close a file in the current context mode.
+
+        Args:
+            file: Path to the file to close
+            reason: Reason for closing the file
+
+        Returns:
+            Success message from context handler
+        """
+        from context import llm_instance
+        return context_handler().close_file(file, reason, llm_instance())
+
+
 
 class ToolMkDir(Tool):
     def __init__(self):

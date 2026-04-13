@@ -62,6 +62,7 @@ Example: `self.assertEqual(result["status"], "ok")`
 - tests/test_fold.py
 - tests/test_fold_regex.py
 - tests/test_ls.py
+- tests/test_close_file.py
 </FILES_INFO>
 
 - For editing and or fixing files please use edit_file

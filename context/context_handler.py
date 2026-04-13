@@ -161,3 +161,24 @@ class ContextHandler(ABC):
         raise NotImplementedError(
             f"Rename operations not supported in {self.mode().value} context mode"
         )
+
+    def close_file(
+        self, path: str, reason: str, llm: Optional[LlmProto] = None
+    ) -> str | dict:
+        """Handle file close in context.
+
+        Base implementation raises NotImplementedError.
+        Override in each context handler to implement close logic.
+
+        Args:
+            path: File path to close
+            reason: Reason for closing the file
+            llm: Optional LLM instance for updating messages (suffix mode)
+
+        Returns:
+            Success message or error dict
+        """
+        del (path, reason, llm)
+        raise NotImplementedError(
+            f"Close file operations not supported in {self.mode().value} context mode"
+        )

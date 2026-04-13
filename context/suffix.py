@@ -189,8 +189,20 @@ class SuffixHandler(ContextHandler):
 
         return content.replace(old_block, new_block, 1)
 
-    def _prune_old_tool_calls(self, messages: list[dict], our_paths: list[str]):
+    def _prune_old_tool_calls(
+        self, 
+        messages: list[dict], 
+        our_paths: list[str],
+        keep_old_edits: int = None,
+        prune_all_for_paths: list[str] = None,
+        include_read_file: bool = False,
+    ):
         """Aggressively prune old tool calls that edit files."""
+        if keep_old_edits is None:
+            keep_old_edits = self.keep_old_edits
+        if prune_all_for_paths is None:
+            prune_all_for_paths = []
+        
         editing_tools = {
             "edit_file",
             "write_file",
@@ -199,6 +211,9 @@ class SuffixHandler(ContextHandler):
             "file_add_fold",
             "file_unfold",
         }
+        # Include read_file if requested (for close_file operation)
+        if include_read_file:
+            editing_tools.add("read_file")
 
         # Track edits per path
         edit_counts: dict[str, int] = {}
@@ -244,7 +259,10 @@ class SuffixHandler(ContextHandler):
                 edit_counts[call_path] += 1
 
                 # Check if we should prune this edit
-                if edit_counts[call_path] > self.keep_old_edits:
+                # For paths in prune_all_for_paths, prune ALL occurrences (not just exceeding keep_old_edits)
+                should_prune = call_path in prune_all_for_paths or edit_counts[call_path] > keep_old_edits
+                
+                if should_prune:
                     # Prune this tool call by replacing arguments
                     new_args = {"path": call_path, "cleanup": "the call is removed"}
                     func_info["arguments"] = json.dumps(new_args)
@@ -699,3 +717,103 @@ class SuffixHandler(ContextHandler):
 
                     except (json.JSONDecodeError, TypeError):
                         pass
+    @override
+    def close_file(
+        self, path: str, reason: str, llm: Optional[LlmProto] = None
+    ) -> str | dict:
+        """Handle file close in suffix context mode.
+
+        This method:
+        1. Prunes all old tool calls for this file (including read_file)
+        2. Replaces all content blocks with a "File closed" message
+        3. Updates the context entry to show the file is closed
+
+        Args:
+            path: File path to close
+            reason: Reason for closing the file
+            llm: Optional LLM instance for updating messages
+
+        Returns:
+            Success message
+        """
+        import re
+        import json
+
+        # Get messages to update
+        messages = llm.messages() if llm is not None else []
+
+        # Prune all tool calls for this file (including read_file)
+        if messages:
+            self._prune_old_tool_calls(
+                messages, 
+                [path],
+                keep_old_edits=0,  # Prune all
+                prune_all_for_paths=[path],  # Prune ALL occurrences
+                include_read_file=True  # Include read_file in pruning
+            )
+
+        # Replace all content blocks for this file with "File closed" message
+        if messages:
+            self._replace_content_blocks(messages, path, reason)
+
+        # Update context entry to show file is closed
+        if path in SUFFIX_CONTEXTS:
+            ContextEntry.last_id += 1
+            new_id = f"CTX({ContextEntry.last_id})"
+            closed_text = f"((File closed, reason: {reason}))"
+            SUFFIX_CONTEXTS[path] = ContextEntry(
+                path, closed_text, new_id, "close_file"
+            )
+
+        return f">>> OK: close_file {path}"
+
+    def _replace_content_blocks(self, messages: list[dict], path: str, reason: str):
+        """Replace all content blocks for a file with a "File closed" message.
+
+        Args:
+            messages: List of message dictionaries
+            path: File path to close
+            reason: Reason for closing the file
+        """
+        import re
+        pfx = re.escape(self.prefix)
+        closed_text = f"{self.prefix} ((File closed, reason: {reason}))"
+
+        # Iterate through all messages
+        for msg in messages:
+            content = msg.get("content", "")
+            if not isinstance(content, str):
+                continue
+
+            # Pattern to match header line for this file
+            header_pattern = rf"({pfx}\s*ID:\s*CTX\(\d+\)\s+OPERATION:\s+\w+\s+CTX-IO-FILE:\s+{re.escape(path)})"
+            
+            # Find all header matches
+            for header_match in re.finditer(header_pattern, content):
+                header_start = header_match.start()
+                header_end = header_match.end()
+                
+                # Find CONTENT START after this header
+                content_start_marker = f"{pfx} === CONTENT START ==="
+                content_start_idx = content.find(content_start_marker, header_end)
+                if content_start_idx == -1:
+                    continue
+                
+                # Find CONTENT END
+                content_end_marker = f"{pfx} === CONTENT END ==="
+                content_end_idx = content.find(content_end_marker, content_start_idx)
+                if content_end_idx == -1:
+                    continue
+                
+                # Find end of CONTENT END line
+                content_end_line_end = content.find("\n", content_end_idx)
+                if content_end_line_end == -1:
+                    content_end_line_end = len(content)
+                
+                # Replace the entire block
+                old_block = content[header_start:content_end_line_end]
+                new_block = f"{header_match.group(1)}\n{closed_text}"
+                content = content.replace(old_block, new_block, 1)
+                
+            # Update message content
+            msg["content"] = content
