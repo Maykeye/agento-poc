@@ -100,19 +100,21 @@ class ToolEditDiffPatch(Tool):
             # Failed to find all hunks
             if not ToolEditDiffPatch.SKIP_SAVING_INVALID_PATCHES:
                 _save_debug_patch_files(path, original_content, patch)
-            
+
             # Log failed patch to database
             from llm import LLM
+
             if LLM.INSTANCES:
                 llm_instance = LLM.INSTANCES[-1]
                 if llm_instance.llm.last_tool_call_num is not None:
                     import utilsql
+
                     utilsql.log_patch_fail(
                         llm_instance.llm.last_tool_call_num,
                         original_content,
                         patch,
                     )
-            
+
             return {
                 path: "error",
                 "error": f"Could not apply patch: could not find all hunks in file",
@@ -209,6 +211,11 @@ def _parse_patch_hunks(patch: str) -> list[dict]:
                     "has_operations": has_operations,
                 }
             )
+            continue
+        # TODO: if @@ not found, do exact search first
+        raise ValueError(
+            "Hunk header expected (i.e. @@ -[OldStart],[OldCount] +[NewStart],[NewCount])"
+        )
 
     return hunks
 
