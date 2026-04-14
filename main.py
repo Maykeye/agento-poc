@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -6,11 +7,10 @@ from context.context import context_handler
 from llm import LLM
 import tool_fork
 import tool_editor
-from utils import expand_file
+from utils import expand_file, format_duration
 from utilsql import log_prompt
 import config
 import tool_io
-import tool_edit_patch
 import tool_rpg
 import tool_sh
 import sys
@@ -104,6 +104,7 @@ class AgencyNode:
 
 
 def main():
+    start = time.monotonic()
     set_context_mode(ContextMode.SUFFIX)  # TODO: add to @config?
 
     # Parse initial prompt file
@@ -128,6 +129,10 @@ def main():
     node.simple(prompt)
     if node.lang == "rust":
         tool_sh.rustfmt()
+    end = time.monotonic()
+
+    # Report
+    print(f"Elapsed time: {format_duration(end - start)}")
 
 
 if __name__ == "__main__":

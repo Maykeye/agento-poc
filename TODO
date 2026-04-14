@@ -1,3 +1,6 @@
+- command template_fork: provide common_instruction and array of instruction, e.g. 
+    {common_instruction: "Process a file", forks: ["a.c", "b.c"]}
+
 - command @query workspace topic --- ask anythingllm 
 - command @assistant fake assistant message
 - command @tool-read fakes sending read command (after which true response is appended)

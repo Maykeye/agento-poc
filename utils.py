@@ -1,7 +1,6 @@
 from pathlib import Path
 import subprocess
 from typing import Optional
-import utilsql
 
 import config
 
@@ -83,3 +82,10 @@ def debug_print(*args, **kwargs):
     """Debug print function. Passes all args to print.
     Can be easily disabled later by replacing with a no-op function."""
     print(*args, **kwargs)
+
+
+def format_duration(seconds: float) -> str:
+    minutes, seconds = divmod(int(seconds), 60)
+    if minutes:
+        return f"{minutes}m {seconds}s"
+    return f"{seconds}s"
