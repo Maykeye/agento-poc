@@ -49,7 +49,7 @@ Note. If you are a subagent, don't fork your task.
         assert LLM.INSTANCES[-1].llm.tool_calls_id, "tool calls must exist"
         result = []
 
-        for instruction in instructions:
+        for i, instruction in enumerate(instructions):
             llm = LLM.INSTANCES[-1].llm.clone()
             fork_messages = copy.deepcopy(original_messages)
 
@@ -62,13 +62,17 @@ Note. If you are a subagent, don't fork your task.
 
             fork_start = len(fork_messages) + 1
 
+            others = instructions[:i] + instructions[i + 1 :]
+
             fork_messages.append(
                 {
                     "role": "user",
                     "content": f"""[SYSTEM OVERRIDE: SUB-AGENT ACTIVATION]
 You are a subordinate worker agent. 
+For reference there is instructions given to all other subagents:
+{others}
 
-WARNING: The conversation history above is provided ONLY as background context. It contains instructions meant for your Parent Agent. Do NOT attempt to fulfill the user's original requests. Do NOT attempt to use tools requested by the user.
+WARNING: The conversation history above is provided ONLY as background context. It contains instructions meant for your Parent Agent. Do NOT attempt to fulfill the user's original requests. Do NOT attempt to fulfill tasks given to other subagents.
 
 Your ONLY job is to execute the specific subtask below:
 

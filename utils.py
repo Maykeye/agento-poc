@@ -26,6 +26,8 @@ def expand_file(prompt_file: str, used_files: Optional[set[str]] = None, done=Fa
             continue
         if cmd(line, "@done") is not None:
             done = True
+        elif cmd(line, "@eof") is not None:
+            break
         elif include := cmd(line, "@read "):
             out = expand_file(include, used_files, done)
             new += [out]
