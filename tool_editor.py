@@ -16,6 +16,7 @@ from llm import LLM, FinishGeneration
 from tool import Tool
 from tool_edit_patch import ToolEditDiffPatch
 from tool_io import ToolAppend, ToolWriteFile, ToolReadFile
+import tool_suffix_patch
 
 # Constants
 LINES = 250  # Size of buffer (number of lines to show)
@@ -56,7 +57,8 @@ Empty or non-existing files can be edited - they will be initialized with empty 
         llm.add_tool(EditorToolFindPrev())
         llm.add_tool(EditorToolFindNext())
         llm.add_tool(EditorToolGoto())
-        llm.add_tool(EditorToolPatchCurrentFile())
+        # llm.add_tool(EditorToolPatchCurrentFile())
+        llm.add_tool(tool_suffix_patch.ToolPatchSuffix())
         llm.add_tool(EditorToolEditFile())
         llm.add_tool(EditorToolSwitchFile())
         llm.add_tool(EditorToolRead())
@@ -125,14 +127,12 @@ EDITOR MODE RULES:
 1. You are working with a buffered view of the file (showing {LINES} lines at a time)
 2. Line numbers are 1-indexed and displayed as 5-digit numbers (e.g., 00001, 00123)
 3. The buffer shows lines starting from your current line position
-4. You can navigate using: goto <line>, find_prev/find_next <pattern>
-5. You can edit using: patch_current_file (preferred), edit_file (for single replacements)
-6. You can switch files using: edit_file <path>
-7. When done, use finish_editing(report) to quit editing
-8. All tools except read work only on the current buffer view
+4. You can navigate using: goto <line>, find_prev/find_next <regex>
+5. You can switch files using: edit_file <path>
+6. When done, use finish_editing(report) to quit editing and continue other tasks(e.g. compilation)
+7. All tools except read work only on the current buffer view
+8. You can patch using patch_suffix and its custom suffix (recommended editing tool)
 9. The current file path is: {path}
-
-PREFERRED APPROACH: Use patch_current_file for edits.
 
 Current buffer (starting from line 1):"""
                 + "\n"
@@ -206,6 +206,7 @@ Current buffer (starting from line 1):"""
             "find_next",
             "goto",
             "patch_current_file",
+            "patch_suffix",
             "edit_file",
             "read_file",
             "write_file",

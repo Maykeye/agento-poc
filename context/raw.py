@@ -29,6 +29,8 @@ class RawHandler(ContextHandler):
             sz = Path(config.real_path(path)).stat().st_size
             lines = text.splitlines()
             return f">>> OK: {oper} {path} ({sz} bytes, {len(lines)} lines)\n>>> PATCH APPLIED"
+        elif oper == "patch_suffix":
+            return {path: "ok", "desc": f"Suffix patch applied"}
 
         assert False, "not yet implemented"
 
