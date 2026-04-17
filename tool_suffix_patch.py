@@ -1,29 +1,56 @@
 from typing import Annotated
 from config import real_path, READ_ONLY_FILES, READ_ONLY_ERROR
-from context import context_handler
 from tool import Tool
 from tool_io import ToolWriteFile
 
 
 class ToolPatchSuffix(Tool):
-    """Apply patch with special suffix syntax to a file.
-
-    Patch format:
-    - <<context>> section: context lines prefixed with |, may have {sfx_remove} or {sfx_add} suffixes
-    - <<add>> sections: new content to insert, prefixed with |
-    - Lines with {sfx_remove} are removed from the file
-    - Lines with {sfx_add} trigger insertion of next <<add>> section
-    - Lines with both {sfx_remove}{sfx_add} are removed and replaced with next <<add>> section
-
-    All <<add>> sections must be consumed.
-    """
-
     def __init__(self, sfx_remove: str = "<<remove>>", sfx_add: str = "<<add>>"):
         self.sfx_remove = sfx_remove
         self.sfx_add = sfx_add
         super().__init__(
             name="patch_suffix",
-            description=f"Apply a patch to a file using special suffix syntax. Find context lines, remove lines with {sfx_remove}, insert content from <<add>> sections when {sfx_add} is found. Context lines must be prefixed with |. All <<add>> sections must be consumed.",
+            description=f"""Apply a patch to a file using special suffix syntax.
+
+SYNTAX:
+  - Context section (<<context>>): Lines prefixed with |, stripped of | before matching
+  - Add sections (<<add>>): Lines prefixed with | to insert at marked positions
+  - Suffix {sfx_remove}: Remove the line from output
+  - Suffix {sfx_add}: Keep line, insert next <<add>> section after it
+  - Combined {sfx_remove}{sfx_add}: Remove line, insert next <<add>> section in its place
+  - No suffix: Keep line as-is
+
+EXAMPLE:
+  Original file (example.txt):
+    line1
+    line2
+    line3
+    line4
+    line5
+
+  Patch to remove line2, add after line1, replace line4:
+    <<context>>
+    |line1{self.sfx_add}
+    |line2{self.sfx_remove}
+    |line3
+    |line4{self.sfx_remove}{self.sfx_add}
+    |line5
+    <<add>>
+    |new_line_after_1
+    <<add>>
+    |new_line_a
+    |new_line_b
+
+  Result:
+    line1
+    new_line_after_1
+    line3
+    new_line_a
+    new_line_b
+    line5
+
+SAFETY: File must not have {sfx_remove} or {sfx_add} as line suffixes.
+ALL <<add>> sections must be consumed (triggered by {sfx_add} in context).""",
         )
 
     def __call__(
@@ -56,6 +83,10 @@ class ToolPatchSuffix(Tool):
         try:
             new_content = self._apply_patch(original_content, patch)
         except ValueError as e:
+            print("<<<<<<ERROR PATCH")
+            print(patch)
+            print("ERROR PATCH>>>>>>")
+            print(f"Error: {e}")
             return {path: "error", "error": str(e)}
 
         # TODO: check folds

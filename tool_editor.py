@@ -16,7 +16,6 @@ from llm import LLM, FinishGeneration
 from tool import Tool
 from tool_edit_patch import ToolEditDiffPatch
 from tool_io import ToolAppend, ToolWriteFile, ToolReadFile
-import tool_suffix_patch
 
 # Constants
 LINES = 250  # Size of buffer (number of lines to show)
@@ -58,7 +57,7 @@ Empty or non-existing files can be edited - they will be initialized with empty 
         llm.add_tool(EditorToolFindNext())
         llm.add_tool(EditorToolGoto())
         # llm.add_tool(EditorToolPatchCurrentFile())
-        llm.add_tool(tool_suffix_patch.ToolPatchSuffix())
+        # llm.add_tool(tool_suffix_patch.ToolPatchSuffix())
         llm.add_tool(EditorToolEditFile())
         llm.add_tool(EditorToolSwitchFile())
         llm.add_tool(EditorToolRead())
@@ -131,8 +130,7 @@ EDITOR MODE RULES:
 5. You can switch files using: edit_file <path>
 6. When done, use finish_editing(report) to quit editing and continue other tasks(e.g. compilation)
 7. All tools except read work only on the current buffer view
-8. You can patch using patch_suffix and its custom suffix (recommended editing tool)
-9. The current file path is: {path}
+8. The current file path is: {path}
 
 Current buffer (starting from line 1):"""
                 + "\n"
