@@ -12,8 +12,6 @@ from tests.test_helper import TestBase
 class TestEditorSwitch(TestBase):
     """Test switching files in editor mode."""
 
-    ID = 1000
-
     def init_test_llm(self):
         """Initialize LLM for the test."""
         dummy_llm, msgs = self.init_llm_msgs()
@@ -23,22 +21,11 @@ class TestEditorSwitch(TestBase):
     def test_switch_file_basic(self):
         """Test basic file switching functionality."""
         llm, msgs = self.init_test_llm()
+        switch_tool = tool_editor.EditorToolSwitchFile()
 
         # Enter editor mode with FILE_FOO
         context_handler().prepare_current_llm(llm)
-        self.ID += 1
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="edit_file",
-                        arguments=json.dumps({"path": self.FILE_FOO.name}),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
-        )
+        llm.append_tool_call(switch_tool.name, path=self.FILE_FOO.name)
 
         # Simulate being in editor mode - set up the state manually
         editor_llm = llm.clone()
@@ -56,23 +43,8 @@ class TestEditorSwitch(TestBase):
             }
         )
 
-        # Now simulate switching to FILE_BAR
-        switch_tool = tool_editor.EditorToolSwitchFile()
-
         # Prepare the message for the switch call
-        self.ID += 1
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="edit_file_to_switch",
-                        arguments=json.dumps({"path": self.FILE_BAR.name}),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
-        )
+        llm.append_tool_call(switch_tool.name, path=self.FILE_FOO.name)
 
         # Make the editor_llm the current instance
         LLM.INSTANCES.append(LlmInstace(editor_llm, msgs))
@@ -172,7 +144,7 @@ class TestEditorSwitch(TestBase):
             msgs.append(
                 {
                     "role": "tool",
-                    "tool_call_id": self.ID + i,
+                    "tool_call_id": f"print#{i}",
                     "name": "print_buffer",
                     "content": f"Buffer output {i}",
                 }

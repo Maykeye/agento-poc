@@ -1,16 +1,15 @@
 import unittest
 import os
 from pathlib import Path
-import json
 
 import config
+from tool import Tool
 import tool_edit_patch
 from tool_editor import ToolEditor
-import tool_editor
 import tool_io
 import utilsql
 from context import context, context_handler, ContextMode
-from llm import LLM, LlmInstace, ToolCall
+from llm import LLM, LlmInstace
 from typing import Any, Callable, Optional
 import shutil
 
@@ -24,7 +23,6 @@ def tmpfilename(name: str) -> Path:
 class TestBase(unittest.TestCase):
     FILE_FOO = tmpfilename(".agento.demo.foo")
     FILE_BAR = tmpfilename(".agento.demo.bar")
-    ID = 1000
 
     def init_test_llm(self):
         """Initialize LLM for the test."""
@@ -52,106 +50,33 @@ class TestBase(unittest.TestCase):
         self.FILE_FOO.unlink(True)
         self.FILE_BAR.unlink(True)
 
-    def tool_call_read(self, path: Path) -> Any:
+    def tool_call(self, tool: Tool, **kwargs):
         context_handler().prepare_current_llm(LLM.INSTANCES[-1].llm)
-        self.ID += 1
+        args = {k: v.name if isinstance(v, Path) else v for (k, v) in kwargs.items()}
         msgs = LLM.INSTANCES[-1].messages
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="read_file",
-                        arguments=json.dumps({"path": path.name}),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
-        )
-        res = tool_io.ToolReadFile()(path.name)
-        return self.append_tool_call_result("read_file", msgs, res)
+        LLM.INSTANCES[-1].llm.append_tool_call(tool.name, **args)
+        res = tool(**args)  # type: ignore
+        return self.append_tool_call_result(tool.name, msgs, res)
+
+    def tool_call_read(self, path: Path) -> Any:
+        return self.tool_call(tool_io.ToolReadFile(), path=path)
 
     def tool_call_rename(self, src: Path, dst: Path) -> Any:
-        context_handler().prepare_current_llm(LLM.INSTANCES[-1].llm)
-        self.ID += 1
-        msgs = LLM.INSTANCES[-1].messages
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="rename_file",
-                        arguments=json.dumps({"src": src.name, "dst": dst.name}),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
-        )
-        res = tool_io.ToolRename()(src.name, dst.name)
-        return self.append_tool_call_result("rename_file", msgs, res)
+        return self.tool_call(tool_io.ToolRename(), path_src=src, path_dst=dst)
 
     def tool_call_write(self, path: Path, text: str) -> Any:
-        context_handler().prepare_current_llm(LLM.INSTANCES[-1].llm)
-        self.ID += 1
-        msgs = LLM.INSTANCES[-1].messages
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="write_file",
-                        arguments=json.dumps({"path": path.name, "text": text}),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
-        )
-        res = tool_io.ToolWriteFile()(path.name, text)
-        return self.append_tool_call_result("read_file", msgs, res)
+        return self.tool_call(tool_io.ToolWriteFile(), path=path, text=text)
 
     def tool_call_delete_foo(self) -> Any:
-        context_handler().prepare_current_llm(LLM.INSTANCES[-1].llm)
-        self.ID += 1
-        msgs = LLM.INSTANCES[-1].messages
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="delete_file",
-                        arguments=json.dumps({"path": self.FILE_FOO.name}),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
-        )
-        res = tool_io.ToolDeleteFile()(self.FILE_FOO.name)
-        return self.append_tool_call_result("delete_file", msgs, res)
+        return self.tool_call(tool_io.ToolDeleteFile(), path=self.FILE_FOO)
 
     def tool_call_edit_foo(self, replace_from: str, replace_with: str) -> Any:
-        context_handler().prepare_current_llm(LLM.INSTANCES[-1].llm)
-        self.ID += 1
-        msgs = LLM.INSTANCES[-1].messages
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="edit_file",
-                        arguments=json.dumps(
-                            {
-                                "path": self.FILE_FOO.name,
-                                "replace_from": replace_from,
-                                "replace_with": replace_with,
-                            }
-                        ),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
+        return self.tool_call(
+            tool_io.ToolEditFile(),
+            path=self.FILE_FOO,
+            replace_from=replace_from,
+            replace_with=replace_with,
         )
-        res = tool_io.ToolEditFile()(self.FILE_FOO.name, replace_from, replace_with)
-        return self.append_tool_call_result("edit_file", msgs, res)
 
     def tool_call_add_fold(
         self,
@@ -163,39 +88,15 @@ class TestBase(unittest.TestCase):
         name: str,
     ) -> Any:
         """Call the file_add_fold tool using the implementation class (line numbers)."""
-        context_handler().prepare_current_llm(LLM.INSTANCES[-1].llm)
-        self.ID += 1
-        msgs = LLM.INSTANCES[-1].messages
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="file_add_fold",
-                        arguments=json.dumps(
-                            {
-                                "path": path.name,
-                                "fold_from_line_num": fold_from_line_num,
-                                "fold_from_line": fold_from_line,
-                                "fold_to_line_num": fold_to_line_num,
-                                "fold_to_line": fold_to_line,
-                                "name": name,
-                            }
-                        ),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
+        return self.tool_call(
+            tool_io.ToolFoldAddImpl(),
+            path=path,
+            fold_from_line_num=fold_from_line_num,
+            fold_from_line=fold_from_line,
+            fold_to_line=fold_to_line,
+            fold_to_line_num=fold_to_line_num,
+            name=name,
         )
-        res = tool_io.ToolFoldAddImpl()(
-            path.name,
-            fold_from_line_num,
-            fold_from_line,
-            fold_to_line_num,
-            fold_to_line,
-            name,
-        )
-        return self.append_tool_call_result("file_add_fold", msgs, res)
 
     def tool_call_add_fold_regex(
         self,
@@ -205,96 +106,24 @@ class TestBase(unittest.TestCase):
         name: str,
     ) -> Any:
         """Call the file_add_fold tool with regex patterns (new API)."""
-        context_handler().prepare_current_llm(LLM.INSTANCES[-1].llm)
-        self.ID += 1
-        msgs = LLM.INSTANCES[-1].messages
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="file_add_fold",
-                        arguments=json.dumps(
-                            {
-                                "path": path.name,
-                                "start_pattern": start_pattern,
-                                "end_pattern": end_pattern,
-                                "name": name,
-                            }
-                        ),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
+        return self.tool_call(
+            tool_io.ToolFoldAdd(),
+            path=path,
+            start_pattern=start_pattern,
+            end_pattern=end_pattern,
+            name=name,
         )
-        res = tool_io.ToolFoldAdd()(
-            path.name,
-            start_pattern,
-            end_pattern,
-            name,
-        )
-        return self.append_tool_call_result("file_add_fold", msgs, res)
 
     def tool_call_unfold(self, path, name: str):
         """Call the file_unfold tool."""
-
-        context_handler().prepare_current_llm(LLM.INSTANCES[-1].llm)
-        self.ID += 1
-        msgs = LLM.INSTANCES[-1].messages
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="file_unfold",
-                        arguments=json.dumps({"path": path.name, "name": name}),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
-        )
-        res = tool_io.ToolUnfold()(path.name, name)
-        return self.append_tool_call_result("file_unfold", msgs, res)
+        return self.tool_call(tool_io.ToolUnfold(), path=path, name=name)
 
     def tool_call_unfold_all(self, path):
         """Call the file_unfold_all tool."""
-
-        context_handler().prepare_current_llm(LLM.INSTANCES[-1].llm)
-        self.ID += 1
-        msgs = LLM.INSTANCES[-1].messages
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="file_unfold_all",
-                        arguments=json.dumps({"path": path.name}),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
-        )
-        res = tool_io.ToolUnfoldAll()(path.name)
-        return self.append_tool_call_result("file_unfold_all", msgs, res)
+        return self.tool_call(tool_io.ToolUnfoldAll(), path=path)
 
     def tool_call_editor_append(self, path: Path, text: str) -> Any:
-        context_handler().prepare_current_llm(LLM.INSTANCES[-1].llm)
-        self.ID += 1
-        msgs = LLM.INSTANCES[-1].messages
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="append_to_file",
-                        arguments=json.dumps({"path": path.name, "text": text}),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
-        )
-        res = tool_editor.EditorToolAppend()(path.name, text)
-        return self.append_tool_call_result("append_to_file", msgs, res)
+        return self.tool_call(tool_io.ToolAppend(), path=path, text=text)
 
     def tool_call_with_check(
         self,
@@ -316,6 +145,7 @@ class TestBase(unittest.TestCase):
         Returns:
             The tool call result
         """
+        # TODO: simplify
         llm = LLM.INSTANCES[-1].llm
         msgs = LLM.INSTANCES[-1].messages
         msgs.append(llm.msg_assistant(f"{tool_func}"))
@@ -350,10 +180,17 @@ class TestBase(unittest.TestCase):
         )
 
     def append_tool_call_result(self, func: str, msgs: list[dict], result: str | dict):
+        llm = LLM.INSTANCES[-1].llm
+        msgs = llm.messages()
+        if msgs and (tool_calls := msgs[-1].get("tool_calls")):
+            id = tool_calls[0]["id"]
+        else:
+            id = -1
+
         msgs.append(
             {
                 "role": "tool",
-                "tool_call_id": self.ID,
+                "tool_call_id": id,
                 "name": func,
                 "content": result,
             }

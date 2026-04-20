@@ -204,6 +204,7 @@ class SuffixHandler(ContextHandler):
             prune_all_for_paths = []
 
         editing_tools = {
+            "search_replace_once",
             "edit_file",
             "write_file",
             "delete_file",

@@ -286,6 +286,34 @@ class LLM:
         assert self.INSTANCES[-1].llm is self
         return self.INSTANCES[-1].messages
 
+    def append_tool_call(self, function: str, **kwargs) -> int:
+        """Append a tool call to the current messages and return the tool call ID.
+        Example:
+            llm.append_tool_call("close_file", files=["foo.txt", "bar.txt"], reason="done")
+            llm.append_tool_call("close_file", id="id123", files=["foo.txt"], reason="done")
+        """
+
+        # Create the tool call message
+        self.last_tool_call_num = (self.last_tool_call_num or 0) + 1
+        msg = {
+            "role": "assistant",
+            "tool_calls": [
+                {
+                    "id": self.last_tool_call_num,
+                    "type": "function",
+                    "function": {
+                        "name": function,
+                        "arguments": json.dumps(kwargs),
+                    },
+                }
+            ],
+        }
+
+        # Get current messages and append
+        messages = self.messages()
+        messages.append(msg)
+        return self.last_tool_call_num
+
 
 class LLMVerbose:
     """Print LLM communication to terminal"""

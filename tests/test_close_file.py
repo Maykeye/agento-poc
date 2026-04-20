@@ -1,45 +1,34 @@
 """Tests for ToolCloseFile across all context modes."""
 
-import unittest
 import json
-
-from tests.test_helper import TestBase
+import unittest
 from context import context, ContextMode
-from llm import LLM, ToolCall
-import tool_io
 from context.prefix import CONTEXTS
+from llm import LLM
+import tool_io
+from tests.test_helper import TestBase
 
 
 class TestCloseFile(TestBase):
     """Test ToolCloseFile functionality."""
 
+    def setUp(self):
+        self.close = tool_io.ToolCloseFile()
+        return super().setUp()
+
     def test_close_file_raw_mode(self):
         """Test close_file in RAW context mode (should be NOP)."""
         context.set_context_mode(ContextMode.RAW)
 
-        _, msgs = self.init_test_llm()
+        self.init_test_llm()
 
         # Read the file first
         self.tool_call_read(self.FILE_FOO)
 
         # Close the file
-        self.ID += 1
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="close_file",
-                        arguments=json.dumps(
-                            {"files": [self.FILE_FOO.name], "reason": "done with file"}
-                        ),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
+        res = self.tool_call(
+            self.close, files=[self.FILE_FOO.name], reason="done with file"
         )
-
-        res = tool_io.ToolCloseFile()("done with file", [self.FILE_FOO.name])
 
         # In RAW mode, close_file should return success message
         self.assertIn("OK", res)
@@ -50,33 +39,18 @@ class TestCloseFile(TestBase):
         """Test close_file in PREFIX context mode (removes from CONTEXTS)."""
         context.set_context_mode(ContextMode.PREFIX)
 
-        _, msgs = self.init_test_llm()
+        self.init_test_llm()
 
         # Read the file first
         self.tool_call_read(self.FILE_FOO)
 
         # Verify file is in CONTEXTS
-
         assert self.FILE_FOO.name in CONTEXTS, "File should be in CONTEXTS after read"
 
         # Close the file
-        self.ID += 1
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="close_file",
-                        arguments=json.dumps(
-                            {"files": [self.FILE_FOO.name], "reason": "no longer needed"}
-                        ),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
+        res = self.tool_call(
+            self.close, files=[self.FILE_FOO.name], reason="no longer needed"
         )
-
-        res = tool_io.ToolCloseFile()("no longer needed", [self.FILE_FOO.name])
 
         # Verify success
         self.assertIn("OK", res)
@@ -90,29 +64,15 @@ class TestCloseFile(TestBase):
         """Test close_file in SUFFIX context mode (basic functionality)."""
         context.set_context_mode(ContextMode.SUFFIX)
 
-        _, msgs = self.init_test_llm()
+        self.init_test_llm()
 
         # Read the file first
         self.tool_call_read(self.FILE_FOO)
 
         # Close the file
-        self.ID += 1
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="close_file",
-                        arguments=json.dumps(
-                            {"files": [self.FILE_FOO.name], "reason": "editing complete"}
-                        ),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
+        res = self.tool_call(
+            self.close, files=[self.FILE_FOO.name], reason="editing complete"
         )
-
-        res = tool_io.ToolCloseFile()("editing complete", [self.FILE_FOO.name])
 
         # Verify success
         self.assertIn("OK", res)
@@ -122,7 +82,7 @@ class TestCloseFile(TestBase):
         """Test that close_file prunes old tool calls in SUFFIX mode."""
         context.set_context_mode(ContextMode.SUFFIX)
 
-        _, msgs = self.init_test_llm()
+        self.init_test_llm()
 
         # Read the file
         self.tool_call_read(self.FILE_FOO)
@@ -135,23 +95,7 @@ class TestCloseFile(TestBase):
         self.tool_call_write(self.FILE_FOO, "foo1.2")
 
         # Close the file
-        self.ID += 1
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="close_file",
-                        arguments=json.dumps(
-                            {"files": [self.FILE_FOO.name], "reason": "done"}
-                        ),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
-        )
-
-        res = tool_io.ToolCloseFile()("done", [self.FILE_FOO.name])
+        res = self.tool_call(self.close, files=[self.FILE_FOO.name], reason="done")
 
         # Verify success
         self.assertIn("OK", res)
@@ -176,29 +120,15 @@ class TestCloseFile(TestBase):
         """Test that close_file replaces content blocks with closed message."""
         context.set_context_mode(ContextMode.SUFFIX)
 
-        _, msgs = self.init_test_llm()
+        self.init_test_llm()
 
         # Read the file
         self.tool_call_read(self.FILE_FOO)
 
         # Close the file
-        self.ID += 1
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="close_file",
-                        arguments=json.dumps(
-                            {"files": [self.FILE_FOO.name], "reason": "finished editing"}
-                        ),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
+        res = self.tool_call(
+            self.close, files=[self.FILE_FOO.name], reason="finished editing"
         )
-
-        res = tool_io.ToolCloseFile()("finished editing", [self.FILE_FOO.name])
 
         # Verify success
         self.assertIn("OK", res)
@@ -219,30 +149,16 @@ class TestCloseFile(TestBase):
         """Test that close_file prunes read_file calls in SUFFIX mode."""
         context.set_context_mode(ContextMode.SUFFIX)
 
-        _, msgs = self.init_test_llm()
+        self.init_test_llm()
 
         # Read the file multiple times
         self.tool_call_read(self.FILE_FOO)
         self.tool_call_read(self.FILE_FOO)
 
         # Close the file
-        self.ID += 1
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="close_file",
-                        arguments=json.dumps(
-                            {"files": [self.FILE_FOO.name], "reason": "done reading"}
-                        ),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
+        res = self.tool_call(
+            self.close, files=[self.FILE_FOO.name], reason="done reading"
         )
-
-        res = tool_io.ToolCloseFile()("done reading", [self.FILE_FOO.name])
 
         # Verify success
         self.assertIn("OK", res)
@@ -265,26 +181,10 @@ class TestCloseFile(TestBase):
         """Test close_file on a file that was never opened."""
         context.set_context_mode(ContextMode.SUFFIX)
 
-        _, msgs = self.init_test_llm()
+        self.init_test_llm()
 
         # Try to close a file that was never read
-        self.ID += 1
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="close_file",
-                        arguments=json.dumps(
-                            {"files": ["nonexistent.txt"], "reason": "test"}
-                        ),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
-        )
-
-        res = tool_io.ToolCloseFile()("test", ["nonexistent.txt"])
+        res = self.tool_call(self.close, files=["nonexistent.txt"], reason="test")
 
         # Should still return success (close_file doesn't check if file was opened)
         self.assertIn("OK", res)
@@ -293,29 +193,15 @@ class TestCloseFile(TestBase):
         """Test close_file after write_file operation."""
         context.set_context_mode(ContextMode.SUFFIX)
 
-        _, msgs = self.init_test_llm()
+        self.init_test_llm()
 
         # Write to a file
         self.tool_call_write(self.FILE_BAR, "written content")
 
         # Close the file
-        self.ID += 1
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="close_file",
-                        arguments=json.dumps(
-                            {"files": [self.FILE_BAR.name], "reason": "writing complete"}
-                        ),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
+        res = self.tool_call(
+            self.close, files=[self.FILE_BAR.name], reason="writing complete"
         )
-
-        res = tool_io.ToolCloseFile()("writing complete", [self.FILE_BAR.name])
 
         # Verify success
         self.assertIn("OK", res)
@@ -333,39 +219,21 @@ class TestCloseFile(TestBase):
                         if args.get("path") == self.FILE_BAR.name:
                             assert args.get("cleanup") == "the call is removed"
 
-
     def test_close_multiple_files_raw_mode(self):
         """Test closing multiple files at once in RAW context mode."""
         context.set_context_mode(ContextMode.RAW)
 
-        _, msgs = self.init_test_llm()
+        self.init_test_llm()
 
         # Read both files first
         self.tool_call_read(self.FILE_FOO)
         self.tool_call_read(self.FILE_BAR)
 
         # Close both files at once
-        self.ID += 1
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="close_file",
-                        arguments=json.dumps(
-                            {
-                                "files": [self.FILE_FOO.name, self.FILE_BAR.name],
-                                "reason": "done with both files",
-                            }
-                        ),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
-        )
-
-        res = tool_io.ToolCloseFile()(
-            "done with both files", [self.FILE_FOO.name, self.FILE_BAR.name]
+        res = self.tool_call(
+            self.close,
+            files=[self.FILE_FOO.name, self.FILE_BAR.name],
+            reason="done with both files",
         )
 
         # In RAW mode, close_file should return success message
@@ -379,79 +247,53 @@ class TestCloseFile(TestBase):
         """Test closing multiple files at once in PREFIX context mode."""
         context.set_context_mode(ContextMode.PREFIX)
 
-        _, msgs = self.init_test_llm()
+        self.init_test_llm()
 
         # Read both files first
         self.tool_call_read(self.FILE_FOO)
         self.tool_call_read(self.FILE_BAR)
 
         # Verify both files are in CONTEXTS
-        assert self.FILE_FOO.name in CONTEXTS, "FILE_FOO should be in CONTEXTS after read"
-        assert self.FILE_BAR.name in CONTEXTS, "FILE_BAR should be in CONTEXTS after read"
+        assert (
+            self.FILE_FOO.name in CONTEXTS
+        ), "FILE_FOO should be in CONTEXTS after read"
+        assert (
+            self.FILE_BAR.name in CONTEXTS
+        ), "FILE_BAR should be in CONTEXTS after read"
 
         # Close both files at once
-        self.ID += 1
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="close_file",
-                        arguments=json.dumps(
-                            {
-                                "files": [self.FILE_FOO.name, self.FILE_BAR.name],
-                                "reason": "finished reading",
-                            }
-                        ),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
-        )
-
-        res = tool_io.ToolCloseFile()(
-            "finished reading", [self.FILE_FOO.name, self.FILE_BAR.name]
+        res = self.tool_call(
+            self.close,
+            files=[self.FILE_FOO.name, self.FILE_BAR.name],
+            reason="finished reading",
         )
 
         # Verify success
         self.assertIn("OK", res)
 
         # Verify both files were removed from CONTEXTS
-        assert self.FILE_FOO.name not in CONTEXTS, "FILE_FOO should be removed from CONTEXTS"
-        assert self.FILE_BAR.name not in CONTEXTS, "FILE_BAR should be removed from CONTEXTS"
+        assert (
+            self.FILE_FOO.name not in CONTEXTS
+        ), "FILE_FOO should be removed from CONTEXTS"
+        assert (
+            self.FILE_BAR.name not in CONTEXTS
+        ), "FILE_BAR should be removed from CONTEXTS"
 
     def test_close_multiple_files_suffix_mode(self):
         """Test closing multiple files at once in SUFFIX context mode."""
         context.set_context_mode(ContextMode.SUFFIX)
 
-        _, msgs = self.init_test_llm()
+        self.init_test_llm()
 
         # Read both files first
         self.tool_call_read(self.FILE_FOO)
         self.tool_call_read(self.FILE_BAR)
 
         # Close both files at once
-        self.ID += 1
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="close_file",
-                        arguments=json.dumps(
-                            {
-                                "files": [self.FILE_FOO.name, self.FILE_BAR.name],
-                                "reason": "editing complete",
-                            }
-                        ),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
-        )
-
-        res = tool_io.ToolCloseFile()(
-            "editing complete", [self.FILE_FOO.name, self.FILE_BAR.name]
+        res = self.tool_call(
+            self.close,
+            files=[self.FILE_FOO.name, self.FILE_BAR.name],
+            reason="editing complete",
         )
 
         # Verify success
@@ -466,7 +308,7 @@ class TestCloseFile(TestBase):
         """Test that closing multiple files prunes all tool calls for each file."""
         context.set_context_mode(ContextMode.SUFFIX)
 
-        _, msgs = self.init_test_llm()
+        self.init_test_llm()
 
         # Read and edit both files multiple times
         self.tool_call_read(self.FILE_FOO)
@@ -478,27 +320,10 @@ class TestCloseFile(TestBase):
         self.tool_call_write(self.FILE_BAR, "bar2")
 
         # Close both files at once
-        self.ID += 1
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="close_file",
-                        arguments=json.dumps(
-                            {
-                                "files": [self.FILE_FOO.name, self.FILE_BAR.name],
-                                "reason": "done with both",
-                            }
-                        ),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
-        )
-
-        res = tool_io.ToolCloseFile()(
-            "done with both", [self.FILE_FOO.name, self.FILE_BAR.name]
+        res = self.tool_call(
+            self.close,
+            files=[self.FILE_FOO.name, self.FILE_BAR.name],
+            reason="done with both",
         )
 
         # Verify success
@@ -524,28 +349,15 @@ class TestCloseFile(TestBase):
         """Test that a file can be reopened after being closed in RAW mode."""
         context.set_context_mode(ContextMode.RAW)
 
-        _, msgs = self.init_test_llm()
+        self.init_test_llm()
 
         # Read the file
         self.tool_call_read(self.FILE_FOO)
 
         # Close the file
-        self.ID += 1
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="close_file",
-                        arguments=json.dumps(
-                            {"files": [self.FILE_FOO.name], "reason": "temporarily done"}
-                        ),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
+        self.tool_call(
+            self.close, files=[self.FILE_FOO.name], reason="temporarily done"
         )
-        tool_io.ToolCloseFile()("temporarily done", [self.FILE_FOO.name])
 
         # Reopen the file
         self.tool_call_read(self.FILE_FOO)
@@ -566,68 +378,48 @@ class TestCloseFile(TestBase):
         """Test that a file can be reopened after being closed in PREFIX mode."""
         context.set_context_mode(ContextMode.PREFIX)
 
-        _, msgs = self.init_test_llm()
+        self.init_test_llm()
 
         # Read the file
         self.tool_call_read(self.FILE_FOO)
         assert self.FILE_FOO.name in CONTEXTS, "File should be in CONTEXTS after read"
 
         # Close the file
-        self.ID += 1
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="close_file",
-                        arguments=json.dumps(
-                            {"files": [self.FILE_FOO.name], "reason": "temporarily done"}
-                        ),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
+        self.tool_call(
+            self.close, files=[self.FILE_FOO.name], reason="temporarily done"
         )
-        tool_io.ToolCloseFile()("temporarily done", [self.FILE_FOO.name])
 
         # Verify file was removed from CONTEXTS
-        assert self.FILE_FOO.name not in CONTEXTS, "File should be removed from CONTEXTS"
+        assert (
+            self.FILE_FOO.name not in CONTEXTS
+        ), "File should be removed from CONTEXTS"
 
         # Reopen the file
         self.tool_call_read(self.FILE_FOO)
 
         # Verify file is back in CONTEXTS
-        assert self.FILE_FOO.name in CONTEXTS, "File should be in CONTEXTS after reopening"
+        assert (
+            self.FILE_FOO.name in CONTEXTS
+        ), "File should be in CONTEXTS after reopening"
 
         # Verify content is correct
-        assert CONTEXTS[self.FILE_FOO.name].text == "foo\ntext", "File content should match"
+        assert (
+            CONTEXTS[self.FILE_FOO.name].text == "foo\ntext"
+        ), "File content should match"
 
     def test_reopen_file_after_close_suffix_mode(self):
         """Test that a file can be reopened after being closed in SUFFIX mode."""
         context.set_context_mode(ContextMode.SUFFIX)
 
-        _, msgs = self.init_test_llm()
+        self.init_test_llm()
 
         # Read the file
         self.tool_call_read(self.FILE_FOO)
 
         # Close the file
-        self.ID += 1
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="close_file",
-                        arguments=json.dumps(
-                            {"files": [self.FILE_FOO.name], "reason": "temporarily done"}
-                        ),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
+        self.tool_call(
+            self.close, files=[self.FILE_FOO.name], reason="temporarily done"
         )
-        tool_io.ToolCloseFile()("temporarily done", [self.FILE_FOO.name])
 
         # Verify "File closed" message exists
         messages = LLM.INSTANCES[-1].messages
@@ -659,33 +451,17 @@ class TestCloseFile(TestBase):
         """Test that multiple files can be reopened after being closed together."""
         context.set_context_mode(ContextMode.SUFFIX)
 
-        _, msgs = self.init_test_llm()
+        self.init_test_llm()
 
         # Read both files
         self.tool_call_read(self.FILE_FOO)
         self.tool_call_read(self.FILE_BAR)
 
         # Close both files at once
-        self.ID += 1
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="close_file",
-                        arguments=json.dumps(
-                            {
-                                "files": [self.FILE_FOO.name, self.FILE_BAR.name],
-                                "reason": "temporarily done",
-                            }
-                        ),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
-        )
-        tool_io.ToolCloseFile()(
-            "temporarily done", [self.FILE_FOO.name, self.FILE_BAR.name]
+        self.tool_call(
+            self.close,
+            files=[self.FILE_FOO.name, self.FILE_BAR.name],
+            reason="temporarily done",
         )
 
         # Reopen both files
@@ -711,7 +487,7 @@ class TestCloseFile(TestBase):
         """Test reopening a file after editing and closing it."""
         context.set_context_mode(ContextMode.SUFFIX)
 
-        _, msgs = self.init_test_llm()
+        self.init_test_llm()
 
         # Read the file
         self.tool_call_read(self.FILE_FOO)
@@ -720,22 +496,7 @@ class TestCloseFile(TestBase):
         self.tool_call_edit_foo("foo", "edited_foo")
 
         # Close the file
-        self.ID += 1
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="close_file",
-                        arguments=json.dumps(
-                            {"files": [self.FILE_FOO.name], "reason": "editing done"}
-                        ),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
-        )
-        tool_io.ToolCloseFile()("editing done", [self.FILE_FOO.name])
+        self.tool_call(self.close, files=[self.FILE_FOO.name], reason="editing done")
 
         # Reopen the file
         self.tool_call_read(self.FILE_FOO)
@@ -750,13 +511,15 @@ class TestCloseFile(TestBase):
                     found_edited_content = True
                     break
 
-        assert found_edited_content, "File should contain edited content after reopening"
+        assert (
+            found_edited_content
+        ), "File should contain edited content after reopening"
 
     def test_reopen_and_edit_again(self):
         """Test reopening a closed file and making additional edits."""
         context.set_context_mode(ContextMode.SUFFIX)
 
-        _, msgs = self.init_test_llm()
+        self.init_test_llm()
 
         # Read the file
         self.tool_call_read(self.FILE_FOO)
@@ -765,22 +528,7 @@ class TestCloseFile(TestBase):
         self.tool_call_edit_foo("foo", "first_edit")
 
         # Close the file
-        self.ID += 1
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="close_file",
-                        arguments=json.dumps(
-                            {"files": [self.FILE_FOO.name], "reason": "first edit done"}
-                        ),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
-        )
-        tool_io.ToolCloseFile()("first edit done", [self.FILE_FOO.name])
+        self.tool_call(self.close, files=[self.FILE_FOO.name], reason="first edit done")
 
         # Reopen the file
         self.tool_call_read(self.FILE_FOO)
@@ -798,74 +546,27 @@ class TestCloseFile(TestBase):
                     found_second_edit = True
                     break
 
-        assert found_second_edit, "File should contain second edit after reopening and editing"
+        assert (
+            found_second_edit
+        ), "File should contain second edit after reopening and editing"
 
     def test_multiple_close_reopen_cycles(self):
         """Test multiple close and reopen cycles on the same file."""
         context.set_context_mode(ContextMode.SUFFIX)
 
-        _, msgs = self.init_test_llm()
+        self.init_test_llm()
 
         # First cycle: read, close, reopen
         self.tool_call_read(self.FILE_FOO)
-        
-        self.ID += 1
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="close_file",
-                        arguments=json.dumps(
-                            {"files": [self.FILE_FOO.name], "reason": "cycle 1"}
-                        ),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
-        )
-        tool_io.ToolCloseFile()("cycle 1", [self.FILE_FOO.name])
-        
+        self.tool_call(self.close, files=[self.FILE_FOO.name], reason="cycle 1")
         self.tool_call_read(self.FILE_FOO)
 
         # Second cycle: close, reopen
-        self.ID += 1
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="close_file",
-                        arguments=json.dumps(
-                            {"files": [self.FILE_FOO.name], "reason": "cycle 2"}
-                        ),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
-        )
-        tool_io.ToolCloseFile()("cycle 2", [self.FILE_FOO.name])
-        
+        self.tool_call(self.close, files=[self.FILE_FOO.name], reason="cycle 2")
         self.tool_call_read(self.FILE_FOO)
 
         # Third cycle: close, reopen
-        self.ID += 1
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="close_file",
-                        arguments=json.dumps(
-                            {"files": [self.FILE_FOO.name], "reason": "cycle 3"}
-                        ),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
-        )
-        tool_io.ToolCloseFile()("cycle 3", [self.FILE_FOO.name])
-        
+        self.tool_call(self.close, files=[self.FILE_FOO.name], reason="cycle 3")
         self.tool_call_read(self.FILE_FOO)
 
         # Verify file content is still readable after all cycles
@@ -878,39 +579,25 @@ class TestCloseFile(TestBase):
                     found_content = True
                     break
 
-        assert found_content, "File should be readable after multiple close/reopen cycles"
+        assert (
+            found_content
+        ), "File should be readable after multiple close/reopen cycles"
 
     def test_partial_reopen_after_closing_multiple(self):
         """Test reopening only one file after closing multiple files."""
         context.set_context_mode(ContextMode.SUFFIX)
 
-        _, msgs = self.init_test_llm()
+        self.init_test_llm()
 
         # Read both files
         self.tool_call_read(self.FILE_FOO)
         self.tool_call_read(self.FILE_BAR)
 
         # Close both files
-        self.ID += 1
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="close_file",
-                        arguments=json.dumps(
-                            {
-                                "files": [self.FILE_FOO.name, self.FILE_BAR.name],
-                                "reason": "done with both",
-                            }
-                        ),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
-        )
-        tool_io.ToolCloseFile()(
-            "done with both", [self.FILE_FOO.name, self.FILE_BAR.name]
+        self.tool_call(
+            self.close,
+            files=[self.FILE_FOO.name, self.FILE_BAR.name],
+            reason="done with both",
         )
 
         # Reopen only FILE_FOO
@@ -926,7 +613,11 @@ class TestCloseFile(TestBase):
                 if "foo" in content and "text" in content:
                     found_foo = True
                 # Check for bar content in a new read_file response (not the closed message)
-                if "bar" in content and "value" in content and "File closed" not in content:
+                if (
+                    "bar" in content
+                    and "value" in content
+                    and "File closed" not in content
+                ):
                     found_bar = True
 
         assert found_foo, "FILE_FOO should be reopened"
@@ -936,33 +627,17 @@ class TestCloseFile(TestBase):
         """Test reopening files in a different order than they were closed."""
         context.set_context_mode(ContextMode.SUFFIX)
 
-        _, msgs = self.init_test_llm()
+        self.init_test_llm()
 
         # Read files in order: FOO, BAR
         self.tool_call_read(self.FILE_FOO)
         self.tool_call_read(self.FILE_BAR)
 
         # Close both files
-        self.ID += 1
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="close_file",
-                        arguments=json.dumps(
-                            {
-                                "files": [self.FILE_FOO.name, self.FILE_BAR.name],
-                                "reason": "closing both",
-                            }
-                        ),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
-        )
-        tool_io.ToolCloseFile()(
-            "closing both", [self.FILE_FOO.name, self.FILE_BAR.name]
+        self.tool_call(
+            self.close,
+            files=[self.FILE_FOO.name, self.FILE_BAR.name],
+            reason="closing both",
         )
 
         # Reopen in reverse order: BAR first, then FOO
@@ -983,6 +658,7 @@ class TestCloseFile(TestBase):
 
         assert found_foo, "FILE_FOO should be reopened"
         assert found_bar, "FILE_BAR should be reopened"
+
     def test_close_empty_file_list(self):
         """Test close_file with an empty file list."""
         context.set_context_mode(ContextMode.SUFFIX)
@@ -990,21 +666,7 @@ class TestCloseFile(TestBase):
         _, msgs = self.init_test_llm()
 
         # Try to close with empty list
-        self.ID += 1
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="close_file",
-                        arguments=json.dumps({"files": [], "reason": "test"}),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
-        )
-
-        res = tool_io.ToolCloseFile()("test", [])
+        res = self.tool_call(self.close, files=[], reason="test")
 
         # Should return empty string (nothing to close)
         self.assertEqual(res, "")
@@ -1013,33 +675,16 @@ class TestCloseFile(TestBase):
         """Test close_file with duplicate file names in the list."""
         context.set_context_mode(ContextMode.SUFFIX)
 
-        _, msgs = self.init_test_llm()
+        self.init_test_llm()
 
         # Read the file
         self.tool_call_read(self.FILE_FOO)
 
         # Close with duplicate in the list
-        self.ID += 1
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="close_file",
-                        arguments=json.dumps(
-                            {
-                                "files": [self.FILE_FOO.name, self.FILE_FOO.name],
-                                "reason": "test duplicate",
-                            }
-                        ),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
-        )
-
-        res = tool_io.ToolCloseFile()(
-            "test duplicate", [self.FILE_FOO.name, self.FILE_FOO.name]
+        res = self.tool_call(
+            self.close,
+            files=[self.FILE_FOO.name, self.FILE_FOO.name],
+            reason="test duplicate",
         )
 
         # Should still return success
@@ -1051,7 +696,7 @@ class TestCloseFile(TestBase):
 
         context.set_context_mode(ContextMode.SUFFIX)
 
-        _, msgs = self.init_test_llm()
+        self.init_test_llm()
 
         # Create and read a third file
         third_file = tmpfilename("third.txt")
@@ -1063,32 +708,10 @@ class TestCloseFile(TestBase):
         self.tool_call_read(self.FILE_BAR)
 
         # Close all three files at once
-        self.ID += 1
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    ToolCall(
-                        function="close_file",
-                        arguments=json.dumps(
-                            {
-                                "files": [
-                                    self.FILE_FOO.name,
-                                    self.FILE_BAR.name,
-                                    third_file.name,
-                                ],
-                                "reason": "done with all three",
-                            }
-                        ),
-                        id=f"id{self.ID}",
-                    ).llm_func_call_info()
-                ],
-            }
-        )
-
-        res = tool_io.ToolCloseFile()(
-            "done with all three",
-            [self.FILE_FOO.name, self.FILE_BAR.name, third_file.name],
+        res = self.tool_call(
+            self.close,
+            files=[self.FILE_FOO.name, self.FILE_BAR.name, third_file.name],
+            reason="done with all three",
         )
 
         # Verify success
@@ -1101,5 +724,7 @@ class TestCloseFile(TestBase):
 
         # Clean up
         third_file.unlink()
+
+
 if __name__ == "__main__":
     unittest.main()

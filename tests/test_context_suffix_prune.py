@@ -1,9 +1,11 @@
-from context import ContextMode, context_handler
-from context.suffix import SuffixHandler
-import context
-from tests.test_context import TestContextBase
 import json
-import re
+import context
+import tool_io
+from context import ContextMode
+from context.suffix import SuffixHandler
+from context.suffix import SUFFIX_CONTEXTS
+from context.context_handler import ContextEntry
+from tests.test_context import TestContextBase
 
 
 class TestSuffixPrune(TestContextBase):
@@ -32,10 +34,7 @@ class TestSuffixPrune(TestContextBase):
                 try:
                     args = json.loads(args_str)
                     if args.get("path") == path:
-                        tool_calls.append({
-                            "name": func_info.get("name"),
-                            "args": args
-                        })
+                        tool_calls.append({"name": func_info.get("name"), "args": args})
                 except (json.JSONDecodeError, TypeError):
                     pass
         return tool_calls
@@ -123,12 +122,16 @@ class TestSuffixPrune(TestContextBase):
 
         # First 2 should be pruned (keep_old_edits = 3, so 5-3 = 2 pruned)
         for i in range(2):
-            self.assertIn("cleanup", edit_calls[i]["args"], f"Call {i} should be pruned")
+            self.assertIn(
+                "cleanup", edit_calls[i]["args"], f"Call {i} should be pruned"
+            )
             self.assertEqual(edit_calls[i]["args"]["cleanup"], "the call is removed")
 
         # Last 3 should be preserved
         for i in range(2, 5):
-            self.assertNotIn("cleanup", edit_calls[i]["args"], f"Call {i} should not be pruned")
+            self.assertNotIn(
+                "cleanup", edit_calls[i]["args"], f"Call {i} should not be pruned"
+            )
 
     def test_write_then_edit_prunes_writes(self):
         """Test that write_file and edit_file are both tracked and pruned."""
@@ -205,7 +208,7 @@ class TestSuffixPrune(TestContextBase):
         self.assertNotIn("cleanup", all_calls[0]["args"])
 
         # Edit 1 should be pruned
-        self.assertEqual(all_calls[1]["name"], "edit_file")
+        self.assertEqual(all_calls[1]["name"], "search_replace_once")
         self.assertIn("cleanup", all_calls[1]["args"])
 
     def test_different_file_not_pruned(self):
@@ -227,40 +230,12 @@ class TestSuffixPrune(TestContextBase):
             prev_content = bar_content if i == 0 else f"BAR_EDIT{i}"
             new_content = f"BAR_EDIT{i+1}"
             msgs.append(dummy_llm.msg_assistant(f"Editing bar {i+1}"))
-            msgs.append(
-                {
-                    "role": "assistant",
-                    "tool_calls": [
-                        {
-                            "id": f"id{self.ID}",
-                            "type": "function",
-                            "function": {
-                                "name": "edit_file",
-                                "arguments": json.dumps({
-                                    "path": self.FILE_BAR.name,
-                                    "replace_from": prev_content,
-                                    "replace_with": new_content,
-                                }),
-                            },
-                        }
-                    ],
-                }
+            self.tool_call(
+                tool_io.ToolEditFile(),
+                path=self.FILE_BAR.name,
+                replace_from=prev_content,
+                replace_with=new_content,
             )
-            self.ID += 1
-            self.FILE_BAR.write_text(new_content)
-            from context.suffix import SUFFIX_CONTEXTS
-            from context.context_handler import ContextEntry
-            ContextEntry.last_id += 1
-            new_id = f"CTX({ContextEntry.last_id})"
-            SUFFIX_CONTEXTS[self.FILE_BAR.name] = ContextEntry(
-                self.FILE_BAR.name, new_content, new_id, "edit_file"
-            )
-            msgs.append({
-                "role": "tool",
-                "tool_call_id": self.ID - 1,
-                "name": "edit_file",
-                "content": f">>> ID: {new_id} OPERATION: edit_file CTX-IO-FILE: {self.FILE_BAR.name}\n>>> OK: edit {self.FILE_BAR.name}\n>>> === CONTENT START ===\n{new_content}\n>>> === CONTENT END ==="
-            })
 
         self.epilogue()
 
@@ -278,81 +253,71 @@ class TestSuffixPrune(TestContextBase):
 
     def test_multiple_tool_calls_same_message(self):
         """Test pruning when a message has multiple tool calls for same file."""
-        dummy_llm, msgs = self.init_llm_msgs()
-        msgs.append(dummy_llm.msg_user("Edit foo with multiple calls per message"))
+        llm, msgs = self.init_llm_msgs()
+        msgs.append(llm.msg_user("Edit foo with multiple calls per message"))
 
         # First message with 2 edit calls for foo
-        msgs.append(dummy_llm.msg_assistant("Editing foo with 2 calls"))
-        msgs.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    {
-                        "id": f"id{self.ID}",
-                        "type": "function",
-                        "function": {
-                            "name": "edit_file",
-                            "arguments": json.dumps({
-                                "path": self.FILE_FOO.name,
-                                "replace_from": "foo\ntext",
-                                "replace_with": "EDIT1",
-                            }),
-                        },
-                    },
-                    {
-                        "id": f"id{self.ID+1}",
-                        "type": "function",
-                        "function": {
-                            "name": "edit_file",
-                            "arguments": json.dumps({
-                                "path": self.FILE_FOO.name,
-                                "replace_from": "EDIT1",
-                                "replace_with": "EDIT2",
-                            }),
-                        },
-                    },
-                ],
-            }
+        msgs.append(llm.msg_assistant("Editing foo with 2 calls"))
+        edit = tool_io.ToolEditFile()
+
+        llm.append_tool_call(
+            edit.name,
+            path=self.FILE_FOO.name,
+            replace_from="text1",
+            replace_with="EDIT1",
         )
-        self.ID += 2
+        llm.append_tool_call(
+            edit.name,
+            path=self.FILE_FOO.name,
+            replace_from="EDIT1",
+            replace_with="EDIT2",
+        )
+
+        last_tool_call = llm.messages().pop()["tool_calls"]
+        llm.messages()[-1]["tool_calls"].extend(last_tool_call)
+
         self.FILE_FOO.write_text("EDIT2")
-        from context.suffix import SUFFIX_CONTEXTS
-        from context.context_handler import ContextEntry
-        ContextEntry.last_id += 1
-        new_id = f"CTX({ContextEntry.last_id})"
+
+        new_id = "unused"
         SUFFIX_CONTEXTS[self.FILE_FOO.name] = ContextEntry(
             self.FILE_FOO.name, "EDIT2", new_id, "edit_file"
         )
-        msgs.append({
-            "role": "tool",
-            "tool_call_id": self.ID - 2,
-            "name": "edit_file",
-            "content": f">>> ID: {new_id} OPERATION: edit_file CTX-IO-FILE: {self.FILE_FOO.name}\n>>> OK: edit {self.FILE_FOO.name}\n>>> === CONTENT START ===\nEDIT2\n>>> === CONTENT END ==="
-        })
-        msgs.append({
-            "role": "tool",
-            "tool_call_id": self.ID - 1,
-            "name": "edit_file",
-            "content": f">>> ID: {new_id} OPERATION: edit_file CTX-IO-FILE: {self.FILE_FOO.name}\n>>> OK: edit {self.FILE_FOO.name}\n>>> === CONTENT START ===\nEDIT2\n>>> === CONTENT END ==="
-        })
+        msgs.append(
+            {
+                "role": "tool",
+                "tool_call_id": -2,
+                "name": "search_replace_once",
+                "content": f">>> ID: {new_id} OPERATION: search_replace_once CTX-IO-FILE: {self.FILE_FOO.name}\n>>> OK: edit {self.FILE_FOO.name}\n>>> === CONTENT START ===\nEDIT2\n>>> === CONTENT END ===",
+            }
+        )
+        msgs.append(
+            {
+                "role": "tool",
+                "tool_call_id": -1,
+                "name": "search_replace_once",
+                "content": f">>> ID: {new_id} OPERATION: search_replace_once CTX-IO-FILE: {self.FILE_FOO.name}\n>>> OK: edit {self.FILE_FOO.name}\n>>> === CONTENT START ===\nEDIT2\n>>> === CONTENT END ===",
+            }
+        )
 
         # Second edit
-        msgs.append(dummy_llm.msg_assistant("Editing foo again"))
+        msgs.append(llm.msg_assistant("Editing foo again"))
         self.tool_call_edit_foo("EDIT2", "EDIT3")
 
         # Third edit
-        msgs.append(dummy_llm.msg_assistant("Editing foo again"))
+        msgs.append(llm.msg_assistant("Editing foo again"))
         self.tool_call_edit_foo("EDIT3", "EDIT4")
 
         # Fourth edit - triggers pruning
-        msgs.append(dummy_llm.msg_assistant("Editing foo again"))
+        msgs.append(llm.msg_assistant("Editing foo again"))
         self.tool_call_edit_foo("EDIT4", "EDIT5")
 
         self.epilogue()
 
         # Get all edit calls
         edit_calls = self._get_tool_calls_for_path(msgs, self.FILE_FOO.name)
-        self.assertEqual(len(edit_calls), 5)  # 2 from first msg + 3 subsequent = 5 total
+        self.assertEqual(
+            len(edit_calls), 5
+        )  # 2 from first msg + 3 subsequent = 5 total
 
         # First 2 should be pruned (keep_old_edits = 3, so 5-3=2 pruned)
         self.assertIn("cleanup", edit_calls[0]["args"])
