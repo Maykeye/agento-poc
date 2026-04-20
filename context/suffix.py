@@ -190,11 +190,11 @@ class SuffixHandler(ContextHandler):
         return content.replace(old_block, new_block, 1)
 
     def _prune_old_tool_calls(
-        self, 
-        messages: list[dict], 
+        self,
+        messages: list[dict],
         our_paths: list[str],
-        keep_old_edits: int = None,
-        prune_all_for_paths: list[str] = None,
+        keep_old_edits: Optional[int] = None,
+        prune_all_for_paths: Optional[list[str]] = None,
         include_read_file: bool = False,
     ):
         """Aggressively prune old tool calls that edit files."""
@@ -202,7 +202,7 @@ class SuffixHandler(ContextHandler):
             keep_old_edits = self.keep_old_edits
         if prune_all_for_paths is None:
             prune_all_for_paths = []
-        
+
         editing_tools = {
             "edit_file",
             "write_file",
@@ -260,8 +260,11 @@ class SuffixHandler(ContextHandler):
 
                 # Check if we should prune this edit
                 # For paths in prune_all_for_paths, prune ALL occurrences (not just exceeding keep_old_edits)
-                should_prune = call_path in prune_all_for_paths or edit_counts[call_path] > keep_old_edits
-                
+                should_prune = (
+                    call_path in prune_all_for_paths
+                    or edit_counts[call_path] > keep_old_edits
+                )
+
                 if should_prune:
                     # Prune this tool call by replacing arguments
                     new_args = {"path": call_path, "cleanup": "the call is removed"}
@@ -621,7 +624,9 @@ class SuffixHandler(ContextHandler):
         return actual_line
 
     @override
-    def rename_file(self, path_src: str, path_dst: str, llm: Optional[LlmProto] = None) -> str | dict:
+    def rename_file(
+        self, path_src: str, path_dst: str, llm: Optional[LlmProto] = None
+    ) -> str | dict:
         """Handle file rename in suffix context mode.
 
         This method:
@@ -654,7 +659,9 @@ class SuffixHandler(ContextHandler):
         # Return success message
         return f">>> OK: rename_file from {path_src} to {path_dst}"
 
-    def _update_rename_messages(self, messages: list[dict], path_src: str, path_dst: str):
+    def _update_rename_messages(
+        self, messages: list[dict], path_src: str, path_dst: str
+    ):
         """Update all messages (inputs and outputs) to reference path_dst instead of path_src after rename.
 
         Args:
@@ -678,18 +685,20 @@ class SuffixHandler(ContextHandler):
 
             # Update tool output messages - replace path references in CTX-IO-FILE
             pfx = re.escape(self.prefix)
-            
+
             # Pattern to match the full header with path_src
             pattern = rf"({pfx}\s*ID:\s*CTX\((\d+)\)\s+OPERATION:\s+(\w+)\s+)CTX-IO-FILE:\s+{re.escape(path_src)}"
-            
+
             def replace_with_new_path_and_id(match):
                 """Replace path_src with path_dst and update context ID if needed."""
-                prefix_part = match.group(1)
+                _ = match.group(1)
                 ctx_num = match.group(2)
                 operation = match.group(3)
                 new_id = new_ctx_id if new_ctx_id else f"CTX({ctx_num})"
-                return f"{pfx} ID: {new_id} OPERATION: {operation} CTX-IO-FILE: {path_dst}"
-            
+                return (
+                    f"{pfx} ID: {new_id} OPERATION: {operation} CTX-IO-FILE: {path_dst}"
+                )
+
             new_content = re.sub(pattern, replace_with_new_path_and_id, content)
             if new_content != content:
                 msg["content"] = new_content
@@ -699,7 +708,7 @@ class SuffixHandler(ContextHandler):
             if tool_calls:
                 for tool_call in tool_calls:
                     func_info = tool_call.get("function", {})
-                    func_name = func_info.get("name", "")
+                    _ = func_info.get("name", "")
                     try:
                         args = json.loads(func_info.get("arguments", "{}"))
                         # Check if path argument references path_src
@@ -717,6 +726,7 @@ class SuffixHandler(ContextHandler):
 
                     except (json.JSONDecodeError, TypeError):
                         pass
+
     @override
     def close_file(
         self, path: str, reason: str, llm: Optional[LlmProto] = None
@@ -736,8 +746,6 @@ class SuffixHandler(ContextHandler):
         Returns:
             Success message
         """
-        import re
-        import json
 
         # Get messages to update
         messages = llm.messages() if llm is not None else []
@@ -745,11 +753,11 @@ class SuffixHandler(ContextHandler):
         # Prune all tool calls for this file (including read_file)
         if messages:
             self._prune_old_tool_calls(
-                messages, 
+                messages,
                 [path],
                 keep_old_edits=0,  # Prune all
                 prune_all_for_paths=[path],  # Prune ALL occurrences
-                include_read_file=True  # Include read_file in pruning
+                include_read_file=True,  # Include read_file in pruning
             )
 
         # Replace all content blocks for this file with "File closed" message
@@ -776,6 +784,7 @@ class SuffixHandler(ContextHandler):
             reason: Reason for closing the file
         """
         import re
+
         pfx = re.escape(self.prefix)
         closed_text = f"{self.prefix} ((File closed, reason: {reason}))"
 
@@ -787,33 +796,33 @@ class SuffixHandler(ContextHandler):
 
             # Pattern to match header line for this file
             header_pattern = rf"({pfx}\s*ID:\s*CTX\(\d+\)\s+OPERATION:\s+\w+\s+CTX-IO-FILE:\s+{re.escape(path)})"
-            
+
             # Find all header matches
             for header_match in re.finditer(header_pattern, content):
                 header_start = header_match.start()
                 header_end = header_match.end()
-                
+
                 # Find CONTENT START after this header
                 content_start_marker = f"{pfx} === CONTENT START ==="
                 content_start_idx = content.find(content_start_marker, header_end)
                 if content_start_idx == -1:
                     continue
-                
+
                 # Find CONTENT END
                 content_end_marker = f"{pfx} === CONTENT END ==="
                 content_end_idx = content.find(content_end_marker, content_start_idx)
                 if content_end_idx == -1:
                     continue
-                
+
                 # Find end of CONTENT END line
                 content_end_line_end = content.find("\n", content_end_idx)
                 if content_end_line_end == -1:
                     content_end_line_end = len(content)
-                
+
                 # Replace the entire block
                 old_block = content[header_start:content_end_line_end]
                 new_block = f"{header_match.group(1)}\n{closed_text}"
                 content = content.replace(old_block, new_block, 1)
-                
+
             # Update message content
             msg["content"] = content

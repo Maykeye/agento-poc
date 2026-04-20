@@ -83,10 +83,6 @@ ALL <<add>> sections must be consumed (triggered by {sfx_add} in context).""",
         try:
             new_content = self._apply_patch(original_content, patch)
         except ValueError as e:
-            print("<<<<<<ERROR PATCH")
-            print(patch)
-            print("ERROR PATCH>>>>>>")
-            print(f"Error: {e}")
             return {path: "error", "error": str(e)}
 
         # TODO: check folds

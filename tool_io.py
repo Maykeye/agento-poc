@@ -1,11 +1,12 @@
 from pathlib import Path
-import glob
 from typing import Annotated
+import glob
 import os
-from config import real_path, READ_ONLY_FILES, READ_ONLY_ERROR, project_directory
-from tool import Tool
 import re
+from config import real_path, READ_ONLY_FILES, READ_ONLY_ERROR, project_directory
 from context import ContextMode, context_handler
+from context import llm_instance
+from tool import Tool
 
 # TODO: import logging.basicConfig(level=logging.INFO)
 
@@ -209,17 +210,21 @@ class ToolDeleteFile(Tool):
         p.unlink()
         return context_handler().update(path, "(file deleted)", "delete_file")
 
+
 class ToolCloseFile(Tool):
     def __init__(self):
         super().__init__(
             "close_file",
-            "Close a file that was previously opened/read. Removes it from active context or marks it as closed with a reason. Use this when you're done with a file to free up context space.",
+            "Close files that was previously opened/read. Removes them from active context or marks it as closed with a reason. Use this when you're done with file to free up context space. Close as many files as possible",
         )
 
     def __call__(
         self,
-        file: Annotated[str, "Path to the file to close"],
-        reason: Annotated[str, "Reason for closing the file (e.g., 'done editing', 'no longer needed')"],
+        reason: Annotated[
+            str,
+            "Reason for closing the file (e.g., 'done editing', 'no longer needed')",
+        ],
+        files: Annotated[list[str], "Path to the file to close"],
     ):
         """Close a file in the current context mode.
 
@@ -230,9 +235,12 @@ class ToolCloseFile(Tool):
         Returns:
             Success message from context handler
         """
-        from context import llm_instance
-        return context_handler().close_file(file, reason, llm_instance())
 
+        context = ""
+        for file in files:
+            context += str(context_handler().close_file(file, reason, llm_instance()))
+            context += "\n"
+        return context
 
 
 class ToolMkDir(Tool):
@@ -569,8 +577,6 @@ class ToolRename(Tool):
         ],
         path_dst: Annotated[str, "Destination file path (must not exist)"],
     ):
-        from config import real_path
-        from context import llm_instance
 
         p_src = real_path(path_src)
         p_dst = real_path(path_dst)
