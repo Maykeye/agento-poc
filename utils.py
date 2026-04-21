@@ -1,8 +1,11 @@
-from pathlib import Path
 import subprocess
+import os
 from typing import Optional
+from pathlib import Path
 
 import config
+
+TEMP_DIR = Path(f"/run/user/{os.getuid()}")
 
 
 def expand_file(prompt_file: str, used_files: Optional[set[str]] = None, done=False):

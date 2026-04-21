@@ -1,13 +1,12 @@
 from datetime import datetime
 from typing import Annotated
-from pathlib import Path
 import re
-import os
 import random
 
 from config import READ_ONLY_FILES, real_path, READ_ONLY_ERROR
 from context import context_handler
 from tool import Tool
+from utils import TEMP_DIR
 
 
 class ToolEditDiffPatch(Tool):
@@ -425,8 +424,6 @@ def _save_debug_patch_files(
 ) -> None:
     """Save debug files when patch fails - stores original and patch in temp dir."""
     # Get user ID for temp directory
-    uid = os.getuid()
-    temp_dir = Path(f"/run/user/{uid}")
 
     # Create simplified path (replace / with _)
     simplified_path = path.replace("/", "_")
@@ -435,8 +432,8 @@ def _save_debug_patch_files(
     timestamp = datetime.now().strftime("%Y%m%d.%H%M%S")
     rng = random.randint(10000, 99999)
 
-    orig_file = temp_dir / f"{simplified_path}.orig.{timestamp}.{rng}"
+    orig_file = TEMP_DIR / f"{simplified_path}.orig.{timestamp}.{rng}"
     orig_file.write_text(original_content)
 
-    patch_file = temp_dir / f"{simplified_path}.patch.{timestamp}.{rng}"
+    patch_file = TEMP_DIR / f"{simplified_path}.patch.{timestamp}.{rng}"
     patch_file.write_text(patch_content)

@@ -1,16 +1,36 @@
-from dataclasses import dataclass, field
-from typing import Optional
-
 import copy
 import json
 import os
 import requests
 import sys
 import traceback
-from utils import name_tag
+from dataclasses import dataclass, field
+from typing import Optional
+
+import utilsql
+from utils import name_tag, TEMP_DIR
 from tool import Tool
 from context import context_handler
-import utilsql
+
+
+def postprocess_tool_result(value, indent: int):
+    if isinstance(value, (list, dict)):
+        value = json.dumps(value, ensure_ascii=False, indent=indent)
+    notification = TEMP_DIR / "agento.notification"
+    if notification.exists():
+        try:
+            txt = notification.read_text()
+            if txt.strip():
+                txt = txt.strip()
+                txt = f"[SYSTEM EXTERNAL NOTIFICATION NOT RELATED TO TOOL CALL]\n{txt}"
+                txt = f"{txt}\n[END OF NOTIFICATION]\n"
+                txt = f"{txt}Original response from this point:\n"
+                value = f"{txt}===\n{value}"
+                notification.unlink()
+        except Exception as e:
+            print(f">>> Error during notification read/unlink: {e}")
+
+    return value
 
 
 @dataclass
@@ -218,13 +238,6 @@ class LLM:
                 else:
                     print("Warning: tool call id mismatch", file=sys.stderr)
 
-                def normalize_response(value):
-                    if isinstance(value, (list, dict)):
-                        value = json.dumps(
-                            value, ensure_ascii=False, indent=self.tools_indentation
-                        )
-                    return value
-
                 # Check if tool returned FinishGeneration to stop the loop
                 if isinstance(result, FinishGeneration):
                     # Add the FinishGeneration.value as tool response
@@ -233,7 +246,9 @@ class LLM:
                             "role": "tool",
                             "tool_call_id": call.id,
                             "name": call.function,
-                            "content": normalize_response(result.value),
+                            "content": postprocess_tool_result(
+                                result.value, self.tools_indentation
+                            ),
                         }
                     )
                     # Return response with the FinishGeneration value as content
@@ -241,7 +256,7 @@ class LLM:
                         content=result.value, reasoning_content="", tool_calls=[]
                     )
 
-                result = normalize_response(result)
+                result = postprocess_tool_result(result, self.tools_indentation)
                 assert isinstance(
                     result, str
                 ), f"{type(result)} while str expected in {call}"

@@ -33,6 +33,9 @@ Files can contain extra commands at the start of the line (@ must be the first c
 Example can be seen in ./tests/manual_test_fork.md, ./tests/manual_test_editor.md
 (To launch in I symlinked `main.py` into `~/bin/agento`)
 
+## Notification file
+You can send a notification to LLM: create file `/run/user/$(id -u)/agento.notification`. If this file is not empty, its content will be sent as external notification to LLM on next tool call. File will be deleted.
+
 ## Context mode 
 
 * Context-mode. Currently file operation supports three kinds of operation: 
