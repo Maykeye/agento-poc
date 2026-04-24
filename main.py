@@ -22,6 +22,7 @@ class AgencyNode:
         self._llm: Optional[LLM] = None
         self.readonly = read_only
         self.lang = lang
+        config.set_lang(self.lang)
         assert self.lang in ["rust", "py", "js", "nul", "null", "rpg"]
 
     def _llm_initializers(self):
@@ -92,6 +93,7 @@ class AgencyNode:
             llm.add_tool(tool_sh.ToolPupeeter())
         llm.add_tool(tool_sh.ToolGitDiff())
         llm.add_tool(tool_sh.ToolGitStatus())
+        llm.add_tool(tool_sh.ToolAck())
         llm.add_tool(tool_fork.ToolFork())
 
     def simple(self, user_prompt: str):

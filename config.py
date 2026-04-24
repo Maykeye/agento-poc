@@ -6,6 +6,8 @@ PROJECT_DIRECTORY_ = Path("<THE PROJECT DIRECTORY IS NOT SET>")
 LOGGING_SQLITE_PATH_ = Path("~/.local/state/agento.log").expanduser()
 """ SQLite database path for logging stuff """
 
+LANG_ = "(none)"
+
 
 def set_project_directory(project: str | Path, silent=False):
     """Setup project directory (will be resolved to absolute, expanduser() yaself)"""
@@ -13,6 +15,15 @@ def set_project_directory(project: str | Path, silent=False):
     PROJECT_DIRECTORY_ = Path(project).absolute()
     if not silent:
         print(f"New project dir: {PROJECT_DIRECTORY_}")
+
+
+def set_lang(lang: str):
+    global LANG_
+    LANG_ = lang
+
+
+def lang():
+    return LANG_
 
 
 def project_directory():
@@ -62,7 +73,8 @@ def reset_readonly_files():
 
 def real_path(in_project_path: str | Path):
     path = project_directory().joinpath(in_project_path).resolve()
-    if path.is_relative_to(project_directory()):
+    s = str(in_project_path)
+    if path.is_relative_to(project_directory()) or s.startswith("@") or "/@" in s:
         return path
     else:
         raise ValueError(

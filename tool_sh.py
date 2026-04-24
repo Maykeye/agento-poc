@@ -152,6 +152,21 @@ class ToolPupeeter(Tool):
         return run_executable(all_args)
 
 
+class ToolAck(Tool):
+    def __init__(self):
+        super().__init__("ack", "run ack tool(source code search)")
+
+    def __call__(
+        self,
+        args: Annotated[str, "arguments for ack"],
+    ):
+        all_args = ["ack"]
+        if config.lang() == "rust":
+            all_args += ["--type=rust"]
+        all_args += args
+        return run_executable(all_args)
+
+
 # TODO: promoto to the tool one day
 def rustfmt():
     """Run rust fmt"""
