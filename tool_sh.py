@@ -158,7 +158,7 @@ class ToolAck(Tool):
 
     def __call__(
         self,
-        args: Annotated[str, "arguments for ack"],
+        args: Annotated[list[str], "arguments for ack"],
     ):
         all_args = ["ack"]
         if config.lang() == "rust":
