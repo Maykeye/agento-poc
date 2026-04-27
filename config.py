@@ -1,61 +1,42 @@
 from pathlib import Path
-
-PROJECT_DIRECTORY_ = Path("<THE PROJECT DIRECTORY IS NOT SET>")
-""" Home project directory, a "root" of the project """
-
-LOGGING_SQLITE_PATH_ = Path("~/.local/state/agento.log").expanduser()
-""" SQLite database path for logging stuff """
-
-LANG_ = "(none)"
+from dataclasses import dataclass
 
 
-def set_project_directory(project: str | Path, silent=False):
-    """Setup project directory (will be resolved to absolute, expanduser() yaself)"""
-    global PROJECT_DIRECTORY_
-    PROJECT_DIRECTORY_ = Path(project).absolute()
-    if not silent:
-        print(f"New project dir: {PROJECT_DIRECTORY_}")
+@dataclass
+class Config:
+    language: str
+    project_directory: Path
+    logging_sqlite_path: Path
+    read_only_files: list
+
+    def guess_project_language(self) -> str:
+        files = list(self.project_directory.glob("*"))
+        if any(file.name == "Cargo.toml" for file in files):
+            return "rust"
+        if any(file.name.endswith(".py") for file in files):
+            return "py"
+        if any(file.name.endswith(".js") for file in files):
+            return "js"
+        if CONFIG.project_directory / "static" / "index.html":
+            return "js"
+        print(f"WARNING! NO LANGUAGE DETECTED IN {CONFIG.project_directory}")
+        return "(none)"
+
+    def make_file_readonly(self, path: str):
+        self.read_only_files.append(real_path(path))
+
+    def reset_readonly_files(self):
+        self.read_only_files.clear()
 
 
-def set_lang(lang: str):
-    global LANG_
-    LANG_ = lang
+CONFIG = Config(
+    language="(none)",
+    project_directory=Path("<THE PROJECT_DIRECTORY IS NOT SET>"),
+    logging_sqlite_path=Path("~/.local/state/agento.log").expanduser(),
+    read_only_files=[],
+)
 
 
-def lang():
-    return LANG_
-
-
-def project_directory():
-    return PROJECT_DIRECTORY_
-
-
-def logging_sqlite_path():
-    """Get the SQLite database path for logging"""
-    return LOGGING_SQLITE_PATH_
-
-
-def set_logging_sqlite_path(path: str | Path):
-    """Set the SQLite database path for logging"""
-    global LOGGING_SQLITE_PATH_
-    LOGGING_SQLITE_PATH_ = Path(path)
-
-
-def guess_project_language():
-    files = list(project_directory().glob("*"))
-    if any(file.name == "Cargo.toml" for file in files):
-        return "rust"
-    if any(file.name.endswith(".py") for file in files):
-        return "py"
-    if any(file.name.endswith(".js") for file in files):
-        return "js"
-    if project_directory() / "static" / "index.html":
-        return "js"
-    print(f"WARNING! NO LANGUAGE DETECTED IN {project_directory()}")
-    return "nul"
-
-
-READ_ONLY_FILES = []
 READ_ONLY_ERROR = """FATAL ERRROR. 
 You are NOT allowed to edit this file.
 >>> ABORT EVERYTHING WHAT YOU ARE DOING AT ONCE! 
@@ -63,20 +44,12 @@ You are NOT allowed to edit this file.
 """
 
 
-def make_file_readonly(path: str):
-    READ_ONLY_FILES.append(real_path(path))
-
-
-def reset_readonly_files():
-    READ_ONLY_FILES.clear()
-
-
 def real_path(in_project_path: str | Path):
-    path = project_directory().joinpath(in_project_path).resolve()
+    path = CONFIG.project_directory.joinpath(in_project_path).resolve()
     s = str(in_project_path)
-    if path.is_relative_to(project_directory()) or s.startswith("@") or "/@" in s:
+    if path.is_relative_to(CONFIG.project_directory) or s.startswith("@") or "/@" in s:
         return path
     else:
         raise ValueError(
-            f"{in_project_path} is out of bounds of project directory {project_directory()}"
+            f"{in_project_path} is out of bounds of project directory {CONFIG.project_directory}"
         )

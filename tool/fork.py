@@ -64,10 +64,7 @@ Note. If you are a subagent, don't fork your task.
 
             others = instructions[:i] + instructions[i + 1 :]
 
-            fork_messages.append(
-                {
-                    "role": "user",
-                    "content": f"""[SYSTEM OVERRIDE: SUB-AGENT ACTIVATION]
+            intro = llm.msg_user(f"""[SYSTEM OVERRIDE: SUB-AGENT ACTIVATION]
 You are a subordinate worker agent. 
 For reference there is instructions given to all other subagents:
 {others}
@@ -84,9 +81,8 @@ Think step-by-step, then conclude your work by providing the result wrapped EXAC
 <SUBTASK_REPORT>
 (your final result goes here)
 </SUBTASK_REPORT>
-    """.strip(),
-                }
-            )
+    """.strip())
+            fork_messages.append(intro)
 
             print(f">>>>>>> FORK START: Started generating: `{instruction[:40]}`")
             res = llm.generate(fork_messages)

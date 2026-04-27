@@ -4,15 +4,15 @@ from pathlib import Path
 from typing import Optional
 
 from context.context import context_handler
+from config import CONFIG
 from llm import LLM
-import tool_fork
-import tool_editor
+import tool.editor as tool_editor
 from utils import expand_file, format_duration
 from utilsql import log_prompt
-import config
-import tool_io
-import tool_rpg
-import tool_sh
+from tool import io as tool_io
+import tool.rpg
+import tool.fork
+import tool.sh
 import sys
 from context import set_context_mode, ContextMode
 
@@ -22,7 +22,7 @@ class AgencyNode:
         self._llm: Optional[LLM] = None
         self.readonly = read_only
         self.lang = lang
-        config.set_lang(self.lang)
+        CONFIG.language = self.lang
         assert self.lang in ["rust", "py", "js", "nul", "null", "rpg"]
 
     def _llm_initializers(self):
@@ -54,23 +54,22 @@ class AgencyNode:
         llm.add_tool(tool_io.ToolEditFile())
         llm.add_tool(tool_io.ToolWriteFile())
         llm.add_tool(tool_io.ToolAppend())
-        llm.add_tool(tool_rpg.ToolRollDice())
-        llm.add_tool(tool_rpg.ToolRollCheck())
-        llm.add_tool(tool_rpg.ToolRollVersus())
+        llm.add_tool(tool.rpg.ToolRollDice())
+        llm.add_tool(tool.rpg.ToolRollCheck())
+        llm.add_tool(tool.rpg.ToolRollVersus())
 
     def _llm_editing(self, llm: LLM):
         # llm.add_tool(tool_io.ToolWriteFile())
         # llm.add_tool(tool_io.ToolEditFile())
-        # llm.add_tool(tool_edit_patch.ToolEditDiffPatch())
         llm.add_tool(tool_editor.ToolEditor())
         llm.add_tool(tool_io.ToolDeleteFile())
         llm.add_tool(tool_io.ToolRename())
         llm.add_tool(tool_io.ToolMkDir())
         llm.add_tool(tool_io.ToolRmDir())
-        llm.add_tool(tool_sh.ToolGitAdd())
+        llm.add_tool(tool.sh.ToolGitAdd())
         llm.add_tool(tool_io.ToolAppend())
         if self.lang == "rust":
-            llm.add_tool(tool_sh.ToolCargoAdd())
+            llm.add_tool(tool.sh.ToolCargoAdd())
 
     def _llm_fold(self, llm: LLM):
         if context_handler().mode() == ContextMode.SUFFIX:
@@ -83,18 +82,18 @@ class AgencyNode:
         llm.add_tool(tool_io.ToolReadFile())
         llm.add_tool(tool_io.ToolLs())
         if self.lang == "rust":
-            llm.add_tool(tool_sh.ToolCargoCheck())
-            llm.add_tool(tool_sh.ToolCargoClippy())
-            llm.add_tool(tool_sh.ToolCargoTest())
-            llm.add_tool(tool_sh.ToolRustApiInfo())
+            llm.add_tool(tool.sh.ToolCargoCheck())
+            llm.add_tool(tool.sh.ToolCargoClippy())
+            llm.add_tool(tool.sh.ToolCargoTest())
+            llm.add_tool(tool.sh.ToolRustApiInfo())
         if self.lang == "py":
-            llm.add_tool(tool_sh.ToolPythonUnittest())
+            llm.add_tool(tool.sh.ToolPythonUnittest())
         if self.lang == "js":
-            llm.add_tool(tool_sh.ToolPupeeter())
-        llm.add_tool(tool_sh.ToolGitDiff())
-        llm.add_tool(tool_sh.ToolGitStatus())
-        llm.add_tool(tool_sh.ToolAck())
-        llm.add_tool(tool_fork.ToolFork())
+            llm.add_tool(tool.sh.ToolPupeeter())
+        llm.add_tool(tool.sh.ToolGitDiff())
+        llm.add_tool(tool.sh.ToolGitStatus())
+        llm.add_tool(tool.sh.ToolAck())
+        llm.add_tool(tool.fork.ToolFork())
 
     def simple(self, user_prompt: str):
         llm = self.llm
@@ -115,22 +114,22 @@ def main():
     assert Path(filename).resolve().is_file()
 
     # Example of preventing editing DESIGN.md
-    # config.make_file_readonly("DESIGN.md")
+    # CONFIG.make_file_readonly("DESIGN.md")
     # TODO: use it in prompt.md as @readonly file?
 
     # read prompt
     prompt = expand_file(filename)
-    assert config.project_directory().is_dir(), "set @project_dir in prompt"
+    assert CONFIG.project_directory.is_dir(), "set @project_dir in prompt"
 
-    log_prompt(str(config.project_directory()), prompt)
+    log_prompt(str(CONFIG.project_directory), prompt)
 
     # run
-    lang = config.guess_project_language()
+    lang = CONFIG.guess_project_language()
     print(f"{lang=}")
     node = AgencyNode(lang=lang)
     node.simple(prompt)
     if node.lang == "rust":
-        tool_sh.rustfmt()
+        tool.sh.rustfmt()
     end = time.monotonic()
 
     # Report

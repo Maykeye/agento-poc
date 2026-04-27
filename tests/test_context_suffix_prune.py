@@ -1,6 +1,6 @@
 import json
 import context
-import tool_io
+from tool import io as tool_io
 from context import ContextMode
 from context.suffix import SuffixHandler
 from context.suffix import SUFFIX_CONTEXTS

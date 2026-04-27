@@ -1,7 +1,7 @@
 import unittest
 
-import tool_io
-from test_helper import TMP_PREFIX, TestBase, tmpfilename
+from tool import io as tool_io
+from tests.test_helper import TMP_PREFIX, TestBase, tmpfilename
 import os
 
 

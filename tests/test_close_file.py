@@ -5,7 +5,7 @@ import unittest
 from context import context, ContextMode
 from context.prefix import CONTEXTS
 from llm import LLM
-import tool_io
+from tool import io as tool_io
 from tests.test_helper import TestBase
 
 

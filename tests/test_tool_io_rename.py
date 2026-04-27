@@ -3,8 +3,8 @@ import os
 from pathlib import Path
 import shutil
 
-import config
-import tool_io
+from config import CONFIG
+from tool import io as tool_io
 from context import context, context_handler, ContextMode
 from context.suffix import SUFFIX_CONTEXTS
 from context.prefix import CONTEXTS as PREFIX_CONTEXTS
@@ -154,7 +154,7 @@ class TestToolRenameSuffix(TestBase):
         SUFFIX_CONTEXTS.clear()
         context.set_context_mode(ContextMode.SUFFIX)
         os.chdir(tmpfilename(""))
-        config.set_project_directory(tmpfilename(""), silent=True)
+        CONFIG.project_directory = tmpfilename("")
 
     def test_rename_file_not_read(self):
         """Test rename when file was not read in suffix context."""

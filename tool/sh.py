@@ -5,10 +5,11 @@ from typing import Annotated
 import config
 import subprocess
 import shlex
+from config import CONFIG
 
 
 def run_git(args: list[str]):
-    return run_executable(["git", "-C", str(config.project_directory())] + args)
+    return run_executable(["git", "-C", str(CONFIG.project_directory)] + args)
 
 
 def run_cargo(cmd: str, args: list[str]):
@@ -18,7 +19,7 @@ def run_cargo(cmd: str, args: list[str]):
         "never",
         cmd,
         "--manifest-path",
-        str(config.project_directory().joinpath("Cargo.toml")),
+        str(CONFIG.project_directory.joinpath("Cargo.toml")),
     ] + args
     return run_executable(all_args)
 
@@ -125,7 +126,7 @@ class ToolRustApiInfo(Tool):
         )
 
     def __call__(self):
-        result = run_executable(["rust-api-helper.sh", str(config.project_directory())])
+        result = run_executable(["rust-api-helper.sh", str(CONFIG.project_directory)])
         if result.get("exitcode") != 0 or "stdout" not in result:
             return result
         stdout = result["stdout"].strip()
@@ -161,8 +162,9 @@ class ToolAck(Tool):
         args: Annotated[list[str], "arguments for ack"],
     ):
         all_args = ["ack"]
-        if config.lang() == "rust":
-            all_args += ["--type=rust"]
+        langs = {"rust": "rust", "py": "python"}
+        if ack_lang := langs.get(CONFIG.language):
+            all_args += [f"--type={ack_lang}"]
         all_args += args
         return run_executable(all_args)
 
@@ -170,5 +172,5 @@ class ToolAck(Tool):
 # TODO: promoto to the tool one day
 def rustfmt():
     """Run rust fmt"""
-    p = shlex.quote(str(config.project_directory()))
+    p = shlex.quote(str(CONFIG.project_directory))
     subprocess.run(["bash", "-c", f"cd {p}; rustfmt --edition 2024 **/*.rs"])

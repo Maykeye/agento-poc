@@ -3,7 +3,7 @@ from typing import Annotated
 import glob
 import os
 import re
-from config import real_path, READ_ONLY_FILES, READ_ONLY_ERROR, project_directory
+from config import real_path, READ_ONLY_ERROR, CONFIG
 from context import ContextMode, context_handler
 from context import llm_instance
 from tool import Tool
@@ -51,9 +51,8 @@ class ToolLs(Tool):
                 # Resolve the path relative to the project directory
                 # glob.glob resolves relative paths from the current directory,
                 # but we need to resolve from the project directory
-                project_dir = project_directory()
                 # Convert the pattern to an absolute path relative to project directory
-                abs_pattern = project_dir / path
+                abs_pattern = CONFIG.project_directory / path
 
                 # Use glob.glob with recursive=True for glob patterns
                 matched = glob.glob(str(abs_pattern), recursive=True)
@@ -67,7 +66,7 @@ class ToolLs(Tool):
                 for m in matched:
                     m_path = Path(m)
                     # Convert absolute path to relative path from project directory
-                    rel_path = m_path.relative_to(project_dir)
+                    rel_path = m_path.relative_to(CONFIG.project_directory)
                     if m_path.is_file():
                         desc = f" File: {rel_path}"
                         desc += f" (Size: {os.path.getsize(m_path)} bytes)"
@@ -173,7 +172,7 @@ class ToolWriteFile(Tool):
     ):
         p = real_path(path)
 
-        if p in READ_ONLY_FILES:
+        if p in CONFIG.read_only_files:
             return {path: "error", "error": READ_ONLY_ERROR}
 
         # Check if there are any folds on this file
@@ -197,7 +196,7 @@ class ToolDeleteFile(Tool):
 
     def __call__(self, path: Annotated[str, "File to delete"]):
         p = real_path(path)
-        if p in READ_ONLY_FILES:
+        if p in CONFIG.read_only_files:
             return {path: "error", "error": READ_ONLY_ERROR}
 
         if p.exists() and not p.is_file():
@@ -300,7 +299,7 @@ class ToolEditFile(Tool):
         replace_with: Annotated[str, "Text insert instead"],
     ):
         p = real_path(path)
-        if p in READ_ONLY_FILES:
+        if p in CONFIG.read_only_files:
             return {path: "error", "error": READ_ONLY_ERROR}
 
         if p.exists() and not p.is_file():
@@ -567,7 +566,7 @@ class ToolRename(Tool):
     def __init__(self):
         super().__init__(
             "rename_file",
-            "Rename a file from path_src to path_dst. Checks that path_src exists and is a file (not directory), and that path_dst does not exist.",
+            "Rename(or move) a file from path_src to path_dst. Checks that path_src exists and is a file (not directory), and that path_dst does not exist.",
         )
 
     def __call__(

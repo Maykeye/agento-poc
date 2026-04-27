@@ -3,7 +3,7 @@ import datetime
 import json
 from typing import Optional
 
-import config
+from config import CONFIG
 
 # Global cache to store in-memory database connections
 _memory_db_cache: Optional[sqlite3.Connection] = None
@@ -22,20 +22,20 @@ def sql_db():
     The caller is responsible for closing the connection or using it as a context manager.
     """
     # Special handling for in-memory databases - always return cached connection
-    if str(config.logging_sqlite_path()) == ":memory:":
+    if str(CONFIG.logging_sqlite_path) == ":memory:":
         global _memory_db_cache
         if _memory_db_cache is None:
             _memory_db_cache = sqlite3.connect(":memory:")
             _create_all_tables(_memory_db_cache)
-            _inited_cache[config.logging_sqlite_path()] = True
+            _inited_cache[CONFIG.logging_sqlite_path] = True
         return _memory_db_cache
 
     # For file-based databases
-    if config.logging_sqlite_path() not in _inited_cache:
-        _inited_cache[config.logging_sqlite_path()] = True
-        with sqlite3.connect(config.logging_sqlite_path()) as db:
+    if CONFIG.logging_sqlite_path not in _inited_cache:
+        _inited_cache[CONFIG.logging_sqlite_path] = True
+        with sqlite3.connect(CONFIG.logging_sqlite_path) as db:
             _create_all_tables(db)
-    db = sqlite3.connect(config.logging_sqlite_path())
+    db = sqlite3.connect(CONFIG.logging_sqlite_path)
 
     return db
 

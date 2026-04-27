@@ -2,11 +2,10 @@ import unittest
 import os
 from pathlib import Path
 
-import config
+from config import CONFIG
 from tool import Tool
-import tool_edit_patch
-from tool_editor import ToolEditor
-import tool_io
+from tool.editor.editor import EditorEntry, ToolEditor
+from tool import io as tool_io
 import utilsql
 from context import context, context_handler, ContextMode
 from llm import LLM, LlmInstace
@@ -23,6 +22,7 @@ def tmpfilename(name: str) -> Path:
 class TestBase(unittest.TestCase):
     FILE_FOO = tmpfilename(".agento.demo.foo")
     FILE_BAR = tmpfilename(".agento.demo.bar")
+    FILE_TEST = tmpfilename(".agento.editor.test")
 
     def init_test_llm(self):
         """Initialize LLM for the test."""
@@ -37,14 +37,13 @@ class TestBase(unittest.TestCase):
         Path(tmpfilename("")).mkdir(parents=True, exist_ok=True)
         context.set_context_mode(ContextMode.RAW)
         os.chdir(tmpfilename(""))
-        config.set_project_directory(tmpfilename(""), silent=True)
-        config.set_logging_sqlite_path(":memory:")
+        CONFIG.project_directory = tmpfilename("")
+        CONFIG.logging_sqlite_path = Path(":memory:")
         utilsql.reset_all_caches()
         ToolEditor.reset()
         LLM.INSTANCES.clear()
         self.FILE_FOO.write_text("foo\ntext")
         self.FILE_BAR.write_text("bar\nvalue")
-        tool_edit_patch.ToolEditDiffPatch.SKIP_SAVING_INVALID_PATCHES = True
 
     def tearDown(self):
         self.FILE_FOO.unlink(True)
@@ -208,3 +207,39 @@ class TestBase(unittest.TestCase):
         dummy_llm.add_tool(tool_io.ToolReadFile())
         msgs = dummy_llm.INSTANCES[-1].messages
         return (dummy_llm, msgs)
+
+    def init_editor_llm(self) -> int:
+        """Initialize an LLM in editor mode for the test file.
+
+        Returns:
+            llm_id
+        """
+        # TODO: the same as in test_editor, need to merge
+        # Create main LLM
+        main_llm = LLM()
+        main_llm.INSTANCES.append(LlmInstace(main_llm, []))
+        main_msgs = main_llm.INSTANCES[-1].messages
+        main_msgs.append(main_llm.msg_user("Test editor operations"))
+        self.tool_call_read(self.FILE_FOO)
+
+        # Create editor LLM (simulating what ToolEditor.__call__ does)
+        editor_llm = main_llm.clone()
+        editor_llm.tools.clear()
+
+        # Add editor tools
+        ToolEditor.init_editor_tools(editor_llm)
+
+        # Set up editor state
+        llm_id = id(editor_llm)
+        ToolEditor._state[llm_id] = EditorEntry(self.FILE_FOO.name, 1)
+
+        # Prepare messages
+        editor_msgs = main_llm.messages() + [
+            main_llm.msg_system("Editor mode system"),
+            main_llm.msg_user(f"Editing {self.FILE_FOO.name}"),
+        ]
+
+        # Register this as current instance
+        editor_llm.INSTANCES.append(LlmInstace(editor_llm, editor_msgs))
+
+        return llm_id

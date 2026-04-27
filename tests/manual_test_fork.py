@@ -1,6 +1,6 @@
 """Test fork tool for proper subtask isolation"""
 
-from tool_fork import ToolFork
+from tool.fork import ToolFork
 from llm import LLM
 
 

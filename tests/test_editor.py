@@ -5,8 +5,8 @@ import unittest
 from context.context import set_context_mode
 from context.context_handler import ContextMode
 from llm import LLM, LlmInstace, FinishGeneration
-import tool_editor
-from tool_editor import EditorEntry, ToolEditor, LINES, KEEP_OLD_BUFFERS
+import tool.editor as tool_editor
+from tool.editor.editor import EditorEntry, ToolEditor, LINES, KEEP_OLD_BUFFERS
 from tests.test_helper import TestBase, tmpfilename
 import json
 
@@ -226,7 +226,7 @@ class TestEditorEditFile(TestEditorBase):
         """Test successful edit in buffer."""
         self.init_editor_llm()
 
-        edit_tool = tool_editor.EditorToolEditFile()
+        edit_tool = tool_editor.EditorToolSearchReplace()
         result = edit_tool(
             replace_from="function test() {", replace_with="MODIFIED function test() {"
         )
@@ -247,7 +247,7 @@ class TestEditorEditFile(TestEditorBase):
         # Go to line 10 (so line 1 is not in buffer)
         ToolEditor._state[llm_id].current_line = 10
 
-        edit_tool = tool_editor.EditorToolEditFile()
+        edit_tool = tool_editor.EditorToolSearchReplace()
         result = edit_tool(replace_from="line 1", replace_with="MODIFIED")
 
         # Should fail - text not in buffer (returns dict)
@@ -263,7 +263,7 @@ class TestEditorEditFile(TestEditorBase):
 
         self.init_editor_llm()
 
-        edit_tool = tool_editor.EditorToolEditFile()
+        edit_tool = tool_editor.EditorToolSearchReplace()
         result = edit_tool(replace_from="duplicate", replace_with="unique")
 
         # Should fail - multiple occurrences (returns dict)
@@ -271,79 +271,6 @@ class TestEditorEditFile(TestEditorBase):
         self.assertIn("error", result)
         self.assertDictHasKeyContains("error", result, "appears")
         self.assertDictHasKeyContains("error", result, "must be exactly once")
-
-
-class TestEditorPatchCurrentFile(TestEditorBase):
-    """Test patch_current_file functionality."""
-
-    def test_patch_simple(self):
-        """Test applying a simple patch."""
-        self.init_editor_llm()
-
-        patch_tool = tool_editor.EditorToolPatchCurrentFile()
-
-        # Create a simple patch
-        patch = """--- a/.agento.editor.test
-+++ b/.agento.editor.test
-@@ -1,4 +1,4 @@
--line 1
-+MODIFIED line 1
- line 2
- line 3
- function test() {
-"""
-        result = patch_tool(patch_text=patch)
-
-        # Should succeed
-        self.assertNotIn("error", result)
-        self.assertIn("Patch applied successfully", result)
-
-        # File should be updated
-        content = self.FILE_TEST.read_text()
-        self.assertIn("MODIFIED line 1", content)
-
-    def test_patch_without_headers(self):
-        """Test applying patch without ---/+++ headers (should add them)."""
-        self.init_editor_llm()
-
-        patch_tool = tool_editor.EditorToolPatchCurrentFile()
-
-        # Patch without headers
-        patch = """@@ -1,4 +1,4 @@
--line 1
-+MODIFIED line 1
- line 2
- line 3
-"""
-        result = patch_tool(patch_text=patch)
-
-        # Should succeed (headers added automatically)
-        self.assertNotIn("error", result)
-        self.assertIn("Patch applied successfully", result)
-
-    def test_patch_no_overlap(self):
-        """Test patch when hunks don't overlap with buffer."""
-        llm_id = self.init_editor_llm()
-
-        # Go to end of file (line 10)
-        ToolEditor._state[llm_id].current_line = 10
-
-        patch_tool = tool_editor.EditorToolPatchCurrentFile()
-
-        # Patch for line 1 (not in current buffer)
-        patch = """--- a/.agento.editor.test
-+++ b/.agento.editor.test
-@@ -1,2 +1,2 @@
--line 1
-+MODIFIED
- line 2
-"""
-        result = patch_tool(patch_text=patch)
-
-        # Should fail - no overlap (returns dict)
-        self.assertIsInstance(result, dict)
-        self.assertIn("error", result)
-        self.assertDictHasKeyContains("error", result, "overlap")
 
 
 class TestEditorAppend(TestEditorBase):

@@ -3,7 +3,7 @@ import os
 from typing import Optional
 from pathlib import Path
 
-import config
+from config import CONFIG
 
 TEMP_DIR = Path(f"/run/user/{os.getuid()}")
 
@@ -35,7 +35,8 @@ def expand_file(prompt_file: str, used_files: Optional[set[str]] = None, done=Fa
             out = expand_file(include, used_files, done)
             new += [out]
         elif project := cmd(line, "@project_dir "):
-            config.set_project_directory(Path(project).resolve())
+            CONFIG.project_directory = Path(project).resolve()
+            print(f"Project directory: {CONFIG.project_directory}")
         elif line.startswith("@#"):  # commentary
             continue
         elif line.startswith("@"):

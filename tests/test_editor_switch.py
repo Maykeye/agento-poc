@@ -1,10 +1,9 @@
-import json
 import unittest
 
-import tool_editor
-from tool_editor import EditorEntry, ToolEditor
+import tool.editor as tool_editor
+from tool.editor.editor import EditorEntry, ToolEditor
 from context import context_handler
-from llm import LLM, LlmInstace, ToolCall
+from llm import LLM, LlmInstace
 
 from tests.test_helper import TestBase
 
@@ -21,7 +20,7 @@ class TestEditorSwitch(TestBase):
     def test_switch_file_basic(self):
         """Test basic file switching functionality."""
         llm, msgs = self.init_test_llm()
-        switch_tool = tool_editor.EditorToolSwitchFile()
+        switch_tool = tool_editor.EditorToolEditFile()
 
         # Enter editor mode with FILE_FOO
         context_handler().prepare_current_llm(llm)
@@ -75,7 +74,7 @@ class TestEditorSwitch(TestBase):
         LLM.INSTANCES.append(LlmInstace(editor_llm, msgs))
 
         # Try to switch to non-existent file
-        switch_tool = tool_editor.EditorToolSwitchFile()
+        switch_tool = tool_editor.EditorToolEditFile()
         result = switch_tool("nonexistent.txt")
 
         # Should get an error
@@ -99,7 +98,7 @@ class TestEditorSwitch(TestBase):
         LLM.INSTANCES.append(LlmInstace(editor_llm, msgs))
 
         # Switch to empty file
-        switch_tool = tool_editor.EditorToolSwitchFile()
+        switch_tool = tool_editor.EditorToolEditFile()
         result = switch_tool(self.FILE_BAR.name)
 
         # Should succeed - empty files are now allowed
@@ -119,7 +118,7 @@ class TestEditorSwitch(TestBase):
         # Don't set up editor mode state
         LLM.INSTANCES.append(LlmInstace(llm, msgs))
 
-        switch_tool = tool_editor.EditorToolSwitchFile()
+        switch_tool = tool_editor.EditorToolEditFile()
         result = switch_tool(self.FILE_BAR.name)
 
         # Should get an error
@@ -137,7 +136,7 @@ class TestEditorSwitch(TestBase):
         ToolEditor.init_editor_tools(editor_llm)
 
         llm_id = id(editor_llm)
-        ToolEditor._state[llm_id] = tool_editor.EditorEntry(self.FILE_FOO.name, 1)
+        ToolEditor._state[llm_id] = EditorEntry(self.FILE_FOO.name, 1)
 
         # Add many buffer messages to simulate old buffers
         for i in range(10):
@@ -153,7 +152,7 @@ class TestEditorSwitch(TestBase):
         LLM.INSTANCES.append(LlmInstace(editor_llm, msgs))
 
         # Switch to another file
-        switch_tool = tool_editor.EditorToolSwitchFile()
+        switch_tool = tool_editor.EditorToolEditFile()
         switch_tool(self.FILE_BAR.name)
 
         # Check that old buffers were pruned

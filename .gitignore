@@ -2,3 +2,4 @@
 .project
 __pycache__
 prompt.md
+tests/dat/

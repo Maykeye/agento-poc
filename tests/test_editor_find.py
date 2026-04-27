@@ -1,6 +1,6 @@
 import unittest
-import tool_editor
-from tool_editor import ToolEditor
+import tool.editor as tool_editor
+from tool.editor.editor import ToolEditor
 from tests.test_editor import TestEditorBase
 
 

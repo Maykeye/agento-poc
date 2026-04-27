@@ -272,6 +272,11 @@ class LLM:
 
             return self._generate(messages)
 
+        # Log normal messages
+        self.last_tool_call_num = utilsql.log_generation(
+            utilsql.prompt_id(), self.llm_id, messages
+        )
+
         return res
 
     def msg_assistant(self, txt: str, reasoning: Optional[str] = None) -> dict:

@@ -2,8 +2,8 @@
 
 import unittest
 from llm import LLM, LlmInstace
-import tool_editor
-from tool_editor import EditorEntry, ToolEditor
+import tool.editor as tool_editor
+from tool.editor.editor import EditorEntry, ToolEditor
 from tests.test_helper import TestBase, tmpfilename
 
 
