@@ -1,9 +1,10 @@
 import json
+import unittest
 import context
+from context.context import context_handler
 from tool import io as tool_io
 from context import ContextMode
 from context.suffix import SuffixHandler
-from context.suffix import SUFFIX_CONTEXTS
 from context.context_handler import ContextEntry
 from tests.test_context import TestContextBase
 
@@ -279,7 +280,9 @@ class TestSuffixPrune(TestContextBase):
         self.FILE_FOO.write_text("EDIT2")
 
         new_id = "unused"
-        SUFFIX_CONTEXTS[self.FILE_FOO.name] = ContextEntry(
+        handler = context_handler()
+        assert isinstance(handler, SuffixHandler), f"type is {handler}"
+        handler.file_entries()[self.FILE_FOO.name] = ContextEntry(
             self.FILE_FOO.name, "EDIT2", new_id, "edit_file"
         )
         msgs.append(
@@ -326,3 +329,7 @@ class TestSuffixPrune(TestContextBase):
         # Last 3 should be preserved
         for i in range(2, 5):
             self.assertNotIn("cleanup", edit_calls[i]["args"])
+
+
+if __name__ == "__main__":
+    unittest.main()

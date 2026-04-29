@@ -6,8 +6,7 @@ from context.context_handler import ContextMode, ContextEntry, LlmProto
 from context.fold import Fold
 from pathlib import Path
 import json
-
-SUFFIX_CONTEXTS = {}
+from llm import LLM
 
 
 class SuffixHandler(ContextHandler):
@@ -19,7 +18,8 @@ class SuffixHandler(ContextHandler):
         self._prefix: str = ">>>"
         # Track folds per file: {path: [Fold, ...]}
         self._folds: dict[str, list[Fold]] = {}
-        SUFFIX_CONTEXTS.clear()
+
+        self.llm_to_file_entries: dict[int, dict[str, ContextEntry]] = {}
 
     @property
     def prefix(self) -> str:
@@ -35,6 +35,13 @@ class SuffixHandler(ContextHandler):
     def mode(self):
         return ContextMode.SUFFIX
 
+    def file_entries(self):
+        key = id(LLM.INSTANCES[-1].llm) if LLM.INSTANCES else 0
+        if key not in self.llm_to_file_entries:
+            self.llm_to_file_entries[key] = {}
+        # TODO: cleanup
+        return self.llm_to_file_entries[key]
+
     @override
     def update(self, path: str, text: str, oper: str, edit_chunk=None):  # type: ignore
         # Increment ID and create new context entry
@@ -42,7 +49,7 @@ class SuffixHandler(ContextHandler):
         new_id = f"CTX({ContextEntry.last_id})"
 
         # Store the new context entry
-        SUFFIX_CONTEXTS[path] = ContextEntry(path, text, new_id, oper)
+        self.file_entries()[path] = ContextEntry(path, text, new_id, oper)
 
         # Return the new content with ID
         pfx = self.prefix
@@ -92,7 +99,7 @@ class SuffixHandler(ContextHandler):
 
         # Build a map of file path -> latest context ID from SUFFIX_CONTEXTS
         latest_contexts: dict[str, str] = {}
-        for path, entry in SUFFIX_CONTEXTS.items():
+        for path, entry in self.file_entries().items():
             latest_contexts[path] = entry.id
 
         # Process each message to prune old messages
@@ -295,10 +302,10 @@ class SuffixHandler(ContextHandler):
         # Update the context entry's ID but keep original text for validation
         # This allows prepare_current_llm to mark previous reads as outdated
         # while still preserving original content for fold validation
-        if path in SUFFIX_CONTEXTS:
-            old_entry = SUFFIX_CONTEXTS[path]
+        if path in self.file_entries():
+            old_entry = self.file_entries()[path]
             # Keep the original text, update ID and operation
-            SUFFIX_CONTEXTS[path] = ContextEntry(
+            self.file_entries()[path] = ContextEntry(
                 old_entry.path, old_entry.text, new_id, oper
             )
 
@@ -335,14 +342,14 @@ class SuffixHandler(ContextHandler):
             Success message with fold info or error dict
         """
         # Check if file has been read
-        if path not in SUFFIX_CONTEXTS:
+        if path not in self.file_entries():
             return {
                 path: "error",
                 "error": f"File {path} has not been read. Read it first with read_file.",
             }
 
         # Get file content and lines
-        text = SUFFIX_CONTEXTS[path].text
+        text = self.file_entries()[path].text
         lines = text.splitlines()
 
         # Validate line numbers
@@ -458,7 +465,7 @@ class SuffixHandler(ContextHandler):
             del self._folds[path]
 
         # Format with remaining folds (or no folds if this was the last one)
-        text = SUFFIX_CONTEXTS[path].text
+        text = self.file_entries()[path].text
         folded_text = self.format_folded_content(path, text)
         return self._format_fold_result(path, folded_text, "file_unfold", name)
 
@@ -486,7 +493,7 @@ class SuffixHandler(ContextHandler):
         del self._folds[path]
 
         # Format with no folds (full content)
-        text = SUFFIX_CONTEXTS[path].text
+        text = self.file_entries()[path].text
         folded_text = self.format_folded_content(path, text)
         return self._format_fold_result(
             path, folded_text, "file_unfold_all", f"{num_folds} folds"
@@ -565,10 +572,10 @@ class SuffixHandler(ContextHandler):
         Returns:
             Tuple of (is_valid, error_message)
         """
-        if path not in SUFFIX_CONTEXTS:
+        if path not in self.file_entries():
             return (False, f"File {path} has not been read")
 
-        text = SUFFIX_CONTEXTS[path].text
+        text = self.file_entries()[path].text
         visible_content = self.format_folded_content(path, text)
 
         # Count occurrences in visible content
@@ -643,13 +650,14 @@ class SuffixHandler(ContextHandler):
             Success message
         """
         # Move context entry from path_src to path_dst
-        if path_src in SUFFIX_CONTEXTS:
-            entry = SUFFIX_CONTEXTS[path_src]
-            del SUFFIX_CONTEXTS[path_src]
+        # TODO: do it in every suffx context of every LLM
+        if path_src in self.file_entries():
+            entry = self.file_entries()[path_src]
+            del self.file_entries()[path_src]
             # Create new entry with new path but same content
             ContextEntry.last_id += 1
             new_id = f"CTX({ContextEntry.last_id})"
-            SUFFIX_CONTEXTS[path_dst] = ContextEntry(
+            self.file_entries()[path_dst] = ContextEntry(
                 path_dst, entry.text, new_id, "rename_file"
             )
 
@@ -675,8 +683,8 @@ class SuffixHandler(ContextHandler):
 
         # Get the new context ID for path_dst (created in rename_file)
         new_ctx_id = None
-        if path_dst in SUFFIX_CONTEXTS:
-            new_ctx_id = SUFFIX_CONTEXTS[path_dst].id
+        if path_dst in self.file_entries():
+            new_ctx_id = self.file_entries()[path_dst].id
 
         # Iterate through all messages
         for msg in messages:
@@ -766,11 +774,11 @@ class SuffixHandler(ContextHandler):
             self._replace_content_blocks(messages, path, reason)
 
         # Update context entry to show file is closed
-        if path in SUFFIX_CONTEXTS:
+        if path in self.file_entries():
             ContextEntry.last_id += 1
             new_id = f"CTX({ContextEntry.last_id})"
             closed_text = f"((File closed, reason: {reason}))"
-            SUFFIX_CONTEXTS[path] = ContextEntry(
+            self.file_entries()[path] = ContextEntry(
                 path, closed_text, new_id, "close_file"
             )
 

@@ -13,11 +13,10 @@ class TestFoldRegex(TestBase):
         """Set up test fixtures with SUFFIX context mode for folding."""
         super().setUp()
         context.set_context_mode(ContextMode.SUFFIX, reset_ctx_id=True)
-        # Clear SUFFIX_CONTEXTS to ensure clean state for each test
-        from context.suffix import SUFFIX_CONTEXTS
 
-        SUFFIX_CONTEXTS.clear()
+        # Clear SUFFIX_CONTEXTS to ensure clean state for each test
         suffix: SuffixHandler = context.context_handler()  # type: ignore
+        suffix.file_entries().clear()
         self.prefix = suffix.prefix
 
     def test_add_fold_regex_basic(self):

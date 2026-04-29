@@ -4,9 +4,9 @@ from pathlib import Path
 import shutil
 
 from config import CONFIG
+from context.suffix import SuffixHandler
 from tool import io as tool_io
 from context import context, context_handler, ContextMode
-from context.suffix import SUFFIX_CONTEXTS
 from context.prefix import CONTEXTS as PREFIX_CONTEXTS
 from tests.test_helper import TestBase, tmpfilename
 
@@ -148,11 +148,10 @@ class TestToolRenameSuffix(TestBase):
 
     def setUp(self):
         super().setUp()
-        # Clear SUFFIX_CONTEXTS to ensure clean state
-        from context.suffix import SUFFIX_CONTEXTS
 
-        SUFFIX_CONTEXTS.clear()
         context.set_context_mode(ContextMode.SUFFIX)
+        self.suffix_context: SuffixHandler = context.context_handler()  # type: ignore
+        self.suffix_context.llm_to_file_entries.clear()
         os.chdir(tmpfilename(""))
         CONFIG.project_directory = tmpfilename("")
 
@@ -166,9 +165,8 @@ class TestToolRenameSuffix(TestBase):
             self.assertIsInstance(result, str)
             self.assertIn("OK", result)
 
-            # Check SUFFIX_CONTEXTS doesn't have the renamed file
-            self.assertNotIn(self.FILE_FOO.name, SUFFIX_CONTEXTS)
-            self.assertNotIn("new_foo.txt", SUFFIX_CONTEXTS)
+            self.assertNotIn(self.FILE_FOO.name, self.suffix_context.file_entries())
+            self.assertNotIn("new_foo.txt", self.suffix_context.file_entries())
 
             # Check file was actually renamed
             self.assertFalse(self.FILE_FOO.exists())
@@ -178,12 +176,11 @@ class TestToolRenameSuffix(TestBase):
 
     def test_rename_file_was_read(self):
         """Test rename when file was read in suffix context."""
-        from context.suffix import SUFFIX_CONTEXTS
 
         # Read the file first
         context_handler().update(self.FILE_FOO.name, "foo\ntext", "read_file")
 
-        self.assertIn(self.FILE_FOO.name, SUFFIX_CONTEXTS)
+        self.assertIn(self.FILE_FOO.name, self.suffix_context.file_entries())
         try:
             # Rename the file
             result = tool_io.ToolRename()(self.FILE_FOO.name, "new_foo.txt")
@@ -193,10 +190,11 @@ class TestToolRenameSuffix(TestBase):
             self.assertIn("OK", result)
 
             # Check SUFFIX_CONTEXTS was updated
-            self.assertNotIn(self.FILE_FOO.name, SUFFIX_CONTEXTS)
-            self.assertIn("new_foo.txt", SUFFIX_CONTEXTS)
-            self.assertEqual(SUFFIX_CONTEXTS["new_foo.txt"].text, "foo\ntext")
-            self.assertEqual(SUFFIX_CONTEXTS["new_foo.txt"].operation, "rename_file")
+            entries = self.suffix_context.file_entries()
+            self.assertNotIn(self.FILE_FOO.name, entries)
+            self.assertIn("new_foo.txt", entries)
+            self.assertEqual(entries["new_foo.txt"].text, "foo\ntext")
+            self.assertEqual(entries["new_foo.txt"].operation, "rename_file")
 
             # Check file was actually renamed
             self.assertFalse(self.FILE_FOO.exists())
@@ -206,32 +204,31 @@ class TestToolRenameSuffix(TestBase):
 
     def test_rename_twice_file_was_read(self):
         """Test rename when file was read, then renamed twice."""
-
         # Read the file first
         FILE_DATA = "TEST-FILE-CONTENT"
         self.FILE_FOO.write_text(FILE_DATA)
-        context.set_context_mode(ContextMode.SUFFIX)
         _, msgs = self.init_llm_msgs()
         self.tool_call_read(self.FILE_FOO)
+        entries = self.suffix_context.file_entries()
 
-        self.assertIn(self.FILE_FOO.name, SUFFIX_CONTEXTS)
+        self.assertIn(self.FILE_FOO.name, entries)
         try:
             # First rename
             result = self.tool_call_rename(self.FILE_FOO, Path("new_foo.txt"))
             self.assertIsInstance(result, str)
             self.assertIn("OK", result)
-            self.assertNotIn(self.FILE_FOO.name, SUFFIX_CONTEXTS)
-            self.assertIn("new_foo.txt", SUFFIX_CONTEXTS)
-            self.assertEqual(SUFFIX_CONTEXTS["new_foo.txt"].operation, "rename_file")
+            self.assertNotIn(self.FILE_FOO.name, entries)
+            self.assertIn("new_foo.txt", entries)
+            self.assertEqual(entries["new_foo.txt"].operation, "rename_file")
 
             # Second rename
             result = self.tool_call_rename(Path("new_foo.txt"), Path("final_foo.txt"))
             self.assertIsInstance(result, str)
             self.assertIn("OK", result)
-            self.assertNotIn("new_foo.txt", SUFFIX_CONTEXTS)
-            self.assertIn("final_foo.txt", SUFFIX_CONTEXTS)
-            self.assertEqual(SUFFIX_CONTEXTS["final_foo.txt"].text, FILE_DATA)
-            self.assertEqual(SUFFIX_CONTEXTS["final_foo.txt"].operation, "rename_file")
+            self.assertNotIn("new_foo.txt", entries)
+            self.assertIn("final_foo.txt", entries)
+            self.assertEqual(entries["final_foo.txt"].text, FILE_DATA)
+            self.assertEqual(entries["final_foo.txt"].operation, "rename_file")
 
             # Check file was actually renamed
             self.assertFalse(self.FILE_FOO.exists())

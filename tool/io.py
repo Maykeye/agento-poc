@@ -6,6 +6,7 @@ import re
 from config import real_path, READ_ONLY_ERROR, CONFIG
 from context import ContextMode, context_handler
 from context import llm_instance
+from context.suffix import SuffixHandler
 from tool import Tool
 
 # TODO: import logging.basicConfig(level=logging.INFO)
@@ -429,17 +430,17 @@ When lines are folded, `FOLD: lines N..M (description)` will be displayed where 
 
         handler = context_handler()
 
-        # Check if file has been read
-        from context.suffix import SUFFIX_CONTEXTS
+        if not isinstance(handler, SuffixHandler):
+            return {"error": "operation not supported in current agent mode"}
 
-        if path not in SUFFIX_CONTEXTS:
+        if path not in handler.file_entries():
             return {
                 path: "error",
                 "error": f"File {path} has not been read. Read it first with read_file.",
             }
 
         # Get the full file content
-        full_text = SUFFIX_CONTEXTS[path].text
+        full_text = handler.file_entries()[path].text
         full_lines = full_text.splitlines()
 
         # Get visible content (with folds applied)
