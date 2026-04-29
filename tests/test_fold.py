@@ -2,7 +2,7 @@
 
 import unittest
 from tests.test_helper import TestBase
-from context import ContextMode, context
+from context import ContextMode, set_context_mode
 
 
 class TestFold(TestBase):
@@ -11,7 +11,7 @@ class TestFold(TestBase):
     def setUp(self):
         """Set up test fixtures with SUFFIX context mode for folding."""
         super().setUp()
-        context.set_context_mode(ContextMode.SUFFIX, reset_ctx_id=True)
+        set_context_mode(ContextMode.SUFFIX, reset_ctx_id=True)
 
     def test_add_fold_basic(self):
         """Test adding a basic fold to a file."""

@@ -6,7 +6,6 @@ from context.context_handler import ContextMode, ContextEntry, LlmProto
 from context.fold import Fold
 from pathlib import Path
 import json
-from llm import LLM
 
 
 class SuffixHandler(ContextHandler):
@@ -36,6 +35,8 @@ class SuffixHandler(ContextHandler):
         return ContextMode.SUFFIX
 
     def file_entries(self):
+        from llm import LLM
+
         key = id(LLM.INSTANCES[-1].llm) if LLM.INSTANCES else 0
         if key not in self.llm_to_file_entries:
             self.llm_to_file_entries[key] = {}

@@ -6,7 +6,7 @@ import shutil
 from config import CONFIG
 from context.suffix import SuffixHandler
 from tool import io as tool_io
-from context import context, context_handler, ContextMode
+from context import context_handler, ContextMode, set_context_mode
 from context.prefix import CONTEXTS as PREFIX_CONTEXTS
 from tests.test_helper import TestBase, tmpfilename
 
@@ -75,7 +75,7 @@ class TestToolRenamePrefix(TestBase):
     def setUp(self):
         super().setUp()
         PREFIX_CONTEXTS.clear()
-        context.set_context_mode(ContextMode.PREFIX)
+        set_context_mode(ContextMode.PREFIX)
 
     def test_rename_file_not_read(self):
         """Test rename when file was not read in prefix context."""
@@ -149,8 +149,8 @@ class TestToolRenameSuffix(TestBase):
     def setUp(self):
         super().setUp()
 
-        context.set_context_mode(ContextMode.SUFFIX)
-        self.suffix_context: SuffixHandler = context.context_handler()  # type: ignore
+        set_context_mode(ContextMode.SUFFIX)
+        self.suffix_context: SuffixHandler = context_handler()  # type: ignore
         self.suffix_context.llm_to_file_entries.clear()
         os.chdir(tmpfilename(""))
         CONFIG.project_directory = tmpfilename("")

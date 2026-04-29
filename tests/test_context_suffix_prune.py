@@ -1,7 +1,6 @@
 import json
 import unittest
-import context
-from context.context import context_handler
+from context import context_handler, set_context_mode
 from tool import io as tool_io
 from context import ContextMode
 from context.suffix import SuffixHandler
@@ -14,7 +13,7 @@ class TestSuffixPrune(TestContextBase):
 
     def setUp(self):
         super().setUp()
-        context.set_context_mode(ContextMode.SUFFIX, reset_ctx_id=True)
+        set_context_mode(ContextMode.SUFFIX, reset_ctx_id=True)
         # Set keep_old_edits to 3 for testing
         SuffixHandler.keep_old_edits = 3
 

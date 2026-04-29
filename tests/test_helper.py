@@ -7,7 +7,7 @@ from tool import Tool
 from tool.editor.editor import EditorEntry, ToolEditor
 from tool import io as tool_io
 import utilsql
-from context import context, context_handler, ContextMode
+from context import context_handler, ContextMode, set_context_mode
 from llm import LLM, LlmInstace
 from typing import Any, Callable, Optional
 import shutil
@@ -35,7 +35,7 @@ class TestBase(unittest.TestCase):
             assert Path(tmpfilename("")).is_dir()
             shutil.rmtree(tmpfilename(""))
         Path(tmpfilename("")).mkdir(parents=True, exist_ok=True)
-        context.set_context_mode(ContextMode.RAW)
+        set_context_mode(ContextMode.RAW)
         os.chdir(tmpfilename(""))
         CONFIG.project_directory = tmpfilename("")
         CONFIG.logging_sqlite_path = Path(":memory:")

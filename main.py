@@ -3,7 +3,6 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from context.context import context_handler
 from config import CONFIG
 from llm import LLM
 import tool.editor as tool_editor
@@ -14,7 +13,7 @@ import tool.rpg
 import tool.fork
 import tool.sh
 import sys
-from context import set_context_mode, ContextMode
+from context import set_context_mode, context_handler, ContextMode
 
 
 class AgencyNode:

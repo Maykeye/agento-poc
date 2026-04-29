@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Optional
 import unittest
 
-from context.context import set_context_mode
+from context import set_context_mode
 from context.context_handler import ContextMode
 from llm import LLM, LlmInstace, FinishGeneration
 import tool.editor as tool_editor

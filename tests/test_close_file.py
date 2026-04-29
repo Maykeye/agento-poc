@@ -2,7 +2,7 @@
 
 import json
 import unittest
-from context import context, ContextMode
+from context import ContextMode, set_context_mode
 from context.prefix import CONTEXTS
 from llm import LLM
 from tool import io as tool_io
@@ -18,7 +18,7 @@ class TestCloseFile(TestBase):
 
     def test_close_file_raw_mode(self):
         """Test close_file in RAW context mode (should be NOP)."""
-        context.set_context_mode(ContextMode.RAW)
+        set_context_mode(ContextMode.RAW)
 
         self.init_test_llm()
 
@@ -37,7 +37,7 @@ class TestCloseFile(TestBase):
 
     def test_close_file_prefix_mode(self):
         """Test close_file in PREFIX context mode (removes from CONTEXTS)."""
-        context.set_context_mode(ContextMode.PREFIX)
+        set_context_mode(ContextMode.PREFIX)
 
         self.init_test_llm()
 
@@ -62,7 +62,7 @@ class TestCloseFile(TestBase):
 
     def test_close_file_suffix_mode_basic(self):
         """Test close_file in SUFFIX context mode (basic functionality)."""
-        context.set_context_mode(ContextMode.SUFFIX)
+        set_context_mode(ContextMode.SUFFIX)
 
         self.init_test_llm()
 
@@ -80,7 +80,7 @@ class TestCloseFile(TestBase):
 
     def test_close_file_suffix_mode_prunes_tool_calls(self):
         """Test that close_file prunes old tool calls in SUFFIX mode."""
-        context.set_context_mode(ContextMode.SUFFIX)
+        set_context_mode(ContextMode.SUFFIX)
 
         self.init_test_llm()
 
@@ -118,7 +118,7 @@ class TestCloseFile(TestBase):
 
     def test_close_file_suffix_mode_replaces_content(self):
         """Test that close_file replaces content blocks with closed message."""
-        context.set_context_mode(ContextMode.SUFFIX)
+        set_context_mode(ContextMode.SUFFIX)
 
         self.init_test_llm()
 
@@ -147,7 +147,7 @@ class TestCloseFile(TestBase):
 
     def test_close_file_suffix_mode_with_read_file_prune(self):
         """Test that close_file prunes read_file calls in SUFFIX mode."""
-        context.set_context_mode(ContextMode.SUFFIX)
+        set_context_mode(ContextMode.SUFFIX)
 
         self.init_test_llm()
 
@@ -179,7 +179,7 @@ class TestCloseFile(TestBase):
 
     def test_close_file_nonexistent_file(self):
         """Test close_file on a file that was never opened."""
-        context.set_context_mode(ContextMode.SUFFIX)
+        set_context_mode(ContextMode.SUFFIX)
 
         self.init_test_llm()
 
@@ -191,7 +191,7 @@ class TestCloseFile(TestBase):
 
     def test_close_file_after_write(self):
         """Test close_file after write_file operation."""
-        context.set_context_mode(ContextMode.SUFFIX)
+        set_context_mode(ContextMode.SUFFIX)
 
         self.init_test_llm()
 
@@ -221,7 +221,7 @@ class TestCloseFile(TestBase):
 
     def test_close_multiple_files_raw_mode(self):
         """Test closing multiple files at once in RAW context mode."""
-        context.set_context_mode(ContextMode.RAW)
+        set_context_mode(ContextMode.RAW)
 
         self.init_test_llm()
 
@@ -245,7 +245,7 @@ class TestCloseFile(TestBase):
 
     def test_close_multiple_files_prefix_mode(self):
         """Test closing multiple files at once in PREFIX context mode."""
-        context.set_context_mode(ContextMode.PREFIX)
+        set_context_mode(ContextMode.PREFIX)
 
         self.init_test_llm()
 
@@ -281,7 +281,7 @@ class TestCloseFile(TestBase):
 
     def test_close_multiple_files_suffix_mode(self):
         """Test closing multiple files at once in SUFFIX context mode."""
-        context.set_context_mode(ContextMode.SUFFIX)
+        set_context_mode(ContextMode.SUFFIX)
 
         self.init_test_llm()
 
@@ -306,7 +306,7 @@ class TestCloseFile(TestBase):
 
     def test_close_multiple_files_suffix_mode_prunes_all(self):
         """Test that closing multiple files prunes all tool calls for each file."""
-        context.set_context_mode(ContextMode.SUFFIX)
+        set_context_mode(ContextMode.SUFFIX)
 
         self.init_test_llm()
 
@@ -347,7 +347,7 @@ class TestCloseFile(TestBase):
 
     def test_reopen_file_after_close_raw_mode(self):
         """Test that a file can be reopened after being closed in RAW mode."""
-        context.set_context_mode(ContextMode.RAW)
+        set_context_mode(ContextMode.RAW)
 
         self.init_test_llm()
 
@@ -376,7 +376,7 @@ class TestCloseFile(TestBase):
 
     def test_reopen_file_after_close_prefix_mode(self):
         """Test that a file can be reopened after being closed in PREFIX mode."""
-        context.set_context_mode(ContextMode.PREFIX)
+        set_context_mode(ContextMode.PREFIX)
 
         self.init_test_llm()
 
@@ -409,7 +409,7 @@ class TestCloseFile(TestBase):
 
     def test_reopen_file_after_close_suffix_mode(self):
         """Test that a file can be reopened after being closed in SUFFIX mode."""
-        context.set_context_mode(ContextMode.SUFFIX)
+        set_context_mode(ContextMode.SUFFIX)
 
         self.init_test_llm()
 
@@ -449,7 +449,7 @@ class TestCloseFile(TestBase):
 
     def test_reopen_multiple_files_after_close(self):
         """Test that multiple files can be reopened after being closed together."""
-        context.set_context_mode(ContextMode.SUFFIX)
+        set_context_mode(ContextMode.SUFFIX)
 
         self.init_test_llm()
 
@@ -485,7 +485,7 @@ class TestCloseFile(TestBase):
 
     def test_reopen_after_edit_and_close(self):
         """Test reopening a file after editing and closing it."""
-        context.set_context_mode(ContextMode.SUFFIX)
+        set_context_mode(ContextMode.SUFFIX)
 
         self.init_test_llm()
 
@@ -517,7 +517,7 @@ class TestCloseFile(TestBase):
 
     def test_reopen_and_edit_again(self):
         """Test reopening a closed file and making additional edits."""
-        context.set_context_mode(ContextMode.SUFFIX)
+        set_context_mode(ContextMode.SUFFIX)
 
         self.init_test_llm()
 
@@ -552,7 +552,7 @@ class TestCloseFile(TestBase):
 
     def test_multiple_close_reopen_cycles(self):
         """Test multiple close and reopen cycles on the same file."""
-        context.set_context_mode(ContextMode.SUFFIX)
+        set_context_mode(ContextMode.SUFFIX)
 
         self.init_test_llm()
 
@@ -585,7 +585,7 @@ class TestCloseFile(TestBase):
 
     def test_partial_reopen_after_closing_multiple(self):
         """Test reopening only one file after closing multiple files."""
-        context.set_context_mode(ContextMode.SUFFIX)
+        set_context_mode(ContextMode.SUFFIX)
 
         self.init_test_llm()
 
@@ -625,7 +625,7 @@ class TestCloseFile(TestBase):
 
     def test_reopen_in_different_order_than_close(self):
         """Test reopening files in a different order than they were closed."""
-        context.set_context_mode(ContextMode.SUFFIX)
+        set_context_mode(ContextMode.SUFFIX)
 
         self.init_test_llm()
 
@@ -661,9 +661,9 @@ class TestCloseFile(TestBase):
 
     def test_close_empty_file_list(self):
         """Test close_file with an empty file list."""
-        context.set_context_mode(ContextMode.SUFFIX)
+        set_context_mode(ContextMode.SUFFIX)
 
-        _, msgs = self.init_test_llm()
+        self.init_test_llm()
 
         # Try to close with empty list
         res = self.tool_call(self.close, files=[], reason="test")
@@ -673,7 +673,7 @@ class TestCloseFile(TestBase):
 
     def test_close_duplicate_files_in_list(self):
         """Test close_file with duplicate file names in the list."""
-        context.set_context_mode(ContextMode.SUFFIX)
+        set_context_mode(ContextMode.SUFFIX)
 
         self.init_test_llm()
 
@@ -694,7 +694,7 @@ class TestCloseFile(TestBase):
         """Test closing three files at once."""
         from tests.test_helper import tmpfilename
 
-        context.set_context_mode(ContextMode.SUFFIX)
+        set_context_mode(ContextMode.SUFFIX)
 
         self.init_test_llm()
 

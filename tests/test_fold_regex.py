@@ -3,7 +3,7 @@
 import unittest
 from context.suffix import SuffixHandler
 from tests.test_helper import TestBase
-from context import ContextMode, context
+from context import ContextMode, set_context_mode, context_handler
 
 
 class TestFoldRegex(TestBase):
@@ -12,10 +12,10 @@ class TestFoldRegex(TestBase):
     def setUp(self):
         """Set up test fixtures with SUFFIX context mode for folding."""
         super().setUp()
-        context.set_context_mode(ContextMode.SUFFIX, reset_ctx_id=True)
+        set_context_mode(ContextMode.SUFFIX, reset_ctx_id=True)
 
         # Clear SUFFIX_CONTEXTS to ensure clean state for each test
-        suffix: SuffixHandler = context.context_handler()  # type: ignore
+        suffix: SuffixHandler = context_handler()  # type: ignore
         suffix.file_entries().clear()
         self.prefix = suffix.prefix
 
