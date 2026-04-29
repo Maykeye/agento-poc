@@ -6,6 +6,7 @@ from context.context_handler import ContextMode, ContextEntry, LlmProto
 from context.fold import Fold
 from pathlib import Path
 import json
+import copy
 
 
 class SuffixHandler(ContextHandler):
@@ -40,6 +41,14 @@ class SuffixHandler(ContextHandler):
         key = id(LLM.INSTANCES[-1].llm) if LLM.INSTANCES else 0
         if key not in self.llm_to_file_entries:
             self.llm_to_file_entries[key] = {}
+            # Copy entries from previous LLM
+            if len(LLM.INSTANCES) > 1:
+                penultimate_key = id(LLM.INSTANCES[-2].llm)
+                if penultimate_key in self.llm_to_file_entries:
+                    self.llm_to_file_entries[key] = copy.deepcopy(
+                        self.llm_to_file_entries[penultimate_key]
+                    )
+
         # TODO: cleanup
         return self.llm_to_file_entries[key]
 
