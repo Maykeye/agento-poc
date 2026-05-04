@@ -93,6 +93,7 @@ class AgencyNode:
         llm.add_tool(tool.sh.ToolGitStatus())
         llm.add_tool(tool.sh.ToolAck())
         llm.add_tool(tool.fork.ToolFork())
+        llm.add_tool(tool.fork.ToolForkTemplate())
 
     def simple(self, user_prompt: str):
         llm = self.llm

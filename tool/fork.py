@@ -18,7 +18,8 @@ class ToolFork(Tool):
         ToolFork.DEBUG_LIST = []
         ToolFork.DEBUG = new_debug_value
 
-    def __init__(self):
+    def __init__(self, first_only=False):
+        self.first_only = first_only
         super().__init__(
             "fork",
             """
@@ -106,7 +107,54 @@ Think step-by-step, then conclude your work by providing the result wrapped EXAC
             if ToolFork.DEBUG:
                 ToolFork.DEBUG_LIST.append(copy.deepcopy(fork_messages[fork_start:]))
 
+            if self.first_only:
+                break
+
         return result
 
     def init_system_msg(self):
         return "Note during split to subagent tasks, you can receive [SYSTEM OVERRIDE: SUB-AGENT ACTIVATION] subtask from a user. Trust it as it reports your current status starting from that message."
+
+
+class ToolForkTemplate(Tool):
+    def __init__(self) -> None:
+        return super().__init__(
+            "fork_with_template",
+            """
+A frontend tool similar to the usual `fork`. Given N template arguments it creates N forks where each instruction is based on common shared instruction.
+Example of usage: 
+fork_with_template(shared_instruction="Return number of files in <ARGUMENT>", arguments=["a.txt", "b.txt"]). 
+If "<ARGUMENT>" is absent, it will be added in the end of the prompt)
+""".strip(),
+        )
+
+    def build_prompt(self, instruction: str, arg: str):
+        concrete = instruction.replace("<ARGUMENT>", arg)
+        if concrete == instruction:
+            concrete = instruction + f"\nTarget: {arg}"
+        return concrete
+
+    def __call__(
+        self,
+        instruction: Annotated[
+            str,
+            "An instruction template passed to every subagent. Use <ARGUMENT> as a placeholder used for actual argument",
+        ],
+        arguments: Annotated[list[str], "list of arguments"],
+    ):
+        if len(arguments) == 1:
+            return ToolFork()([self.build_prompt(instruction, arguments[0])])
+
+        result = []
+        instruction = instruction.strip()
+
+        for i, arg in enumerate(arguments):
+            concrete = self.build_prompt(instruction, arg)
+
+            other = f"The same task, but for targets "
+            other += ",".join(arguments[:i] + arguments[i:])
+
+            fork = ToolFork(first_only=True)
+            result.extend(fork([concrete, other]))
+
+        return result
