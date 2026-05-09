@@ -32,7 +32,7 @@ class Config:
 CONFIG = Config(
     language="(none)",
     project_directory=Path("<THE PROJECT_DIRECTORY IS NOT SET>"),
-    logging_sqlite_path=Path("~/.local/state/agento.log").expanduser(),
+    logging_sqlite_path=Path("~/.local/state/agento/agento.log").expanduser(),
     read_only_files=[],
 )
 

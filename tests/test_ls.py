@@ -1,7 +1,9 @@
 import unittest
 
 from tool import io as tool_io
-from tests.test_helper import TMP_PREFIX, TestBase, tmpfilename
+from tests.test_helper import TestBase, tmpfilename
+from utils import TEMP_DIR
+from pathlib import Path
 import os
 
 
@@ -125,11 +127,11 @@ class TestLs(TestBase):
 
     def test_absolute_path_not_reported_without_glob(self):
         result = tool_io.ToolLs()(["."])
-        self.assertNotIn(TMP_PREFIX, result)
+        self.assertNotIn(str(TEMP_DIR), result)
 
     def test_absolute_path_not_reported_with_glob(self):
         result = tool_io.ToolLs()(["**/*.rs"])
-        self.assertNotIn(TMP_PREFIX, result)
+        self.assertNotIn(str(TEMP_DIR), result)
 
 
 if __name__ == "__main__":

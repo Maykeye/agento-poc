@@ -5,7 +5,8 @@ from pathlib import Path
 
 from config import CONFIG
 
-TEMP_DIR = Path(f"/run/user/{os.getuid()}")
+TEMP_DIR = Path(os.getenv("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}") + "/.agento")
+TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def expand_file(prompt_file: str, used_files: Optional[set[str]] = None, done=False):

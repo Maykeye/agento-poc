@@ -11,12 +11,11 @@ from context import context_handler, ContextMode, set_context_mode
 from llm import LLM, LlmInstace
 from typing import Any, Callable, Optional
 import shutil
-
-TMP_PREFIX = "/run/user"
+from utils import TEMP_DIR
 
 
 def tmpfilename(name: str) -> Path:
-    return Path(f"{TMP_PREFIX}/{os.getuid()}/.agento/{name}")
+    return Path(f"{TEMP_DIR}/{name}")
 
 
 class TestBase(unittest.TestCase):
