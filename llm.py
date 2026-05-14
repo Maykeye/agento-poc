@@ -79,7 +79,10 @@ class LLM:
     DEFAULT_SYSTEM = "You are a helpful ai assistant"
 
     def __init__(self) -> None:
-        self.url = f"http://localhost:{os.environ.get('LLAMA_CPP_PORT', 10000)}/v1/chat/completions"
+        url = os.environ.get("LLAMA_CPP_URL", "http://localhost")
+        self.url = (
+            f"{url}:{os.environ.get('LLAMA_CPP_PORT', 10000)}/v1/chat/completions"
+        )
         self.tools: dict[str, Tool] = {}
         self.tools_indentation = 1
         self.callback = LLMVerbose()

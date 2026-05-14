@@ -23,22 +23,24 @@ class ToolFork(Tool):
         super().__init__(
             "fork",
             """
-A tool to fork task into separate context.
-Purpose of this tool is to save context size. It must be used this way:
+A tool to fork task into new llm. It must be used this way:
 Let say you need to implement or edit foo(), bar(), then check the result. 
 To do so call the tool with instructions ["implement foo", "implement bar"]
 
 After fork ends the tasks, it will report success or failure of each of its task so you can proceed without seeing the actions performed by fork.
 
-Each time fork starts, it will receives the context so far, plus instruction of the subtask you passed. After subtask is complete, it will report the result and quit. You will see brief report only.
+Each time fork starts, it will receives the first message and last `history` messages of context so far, plus instruction of the subtask you passed. After subtask is complete, it will report the result and quit. You will see brief report only.
 
 Note. If you are a subagent, don't fork your task.
 """.strip(),
         )
 
     def __call__(
-        self, instructions: Annotated[list, "Array of instructions for the forked llm."]
+        self,
+        instructions: Annotated[list, "Array of instructions for the forked llm."],
+        history: Annotated[int, "Number of messages before fork to include (>=1)"],
     ):
+        history = max(history, 1)
         assert LLM.INSTANCES, "Must see indexes"
         if isinstance(instructions, str):
             instructions = json.loads(instructions)
@@ -53,13 +55,21 @@ Note. If you are a subagent, don't fork your task.
         for i, instruction in enumerate(instructions):
             llm = LLM.INSTANCES[-1].llm.clone()
             fork_messages = copy.deepcopy(original_messages)
-
             # Remove the parent's tool call from the clone's memory
             if (
                 fork_messages[-1]["role"] == "assistant"
                 and "tool_calls" in fork_messages[-1]
             ):
                 fork_messages.pop()
+
+            if len(fork_messages) > history:
+                fork_messages = fork_messages[0:1] + fork_messages[-(history):]
+                # Strip tool calls
+                while len(fork_messages) > 1:
+                    if fork_messages[1].get("role") == "tool":
+                        del fork_messages[1]
+                        continue
+                    break
 
             fork_start = len(fork_messages) + 1
 
@@ -141,9 +151,10 @@ If "<ARGUMENT>" is absent, it will be added in the end of the prompt)
             "An instruction template passed to every subagent. Use <ARGUMENT> as a placeholder used for actual argument",
         ],
         arguments: Annotated[list[str], "list of arguments"],
+        history: Annotated[int, "Number of messages before fork to include (>=1)"],
     ):
         if len(arguments) == 1:
-            return ToolFork()([self.build_prompt(instruction, arguments[0])])
+            return ToolFork()([self.build_prompt(instruction, arguments[0])], history)
 
         result = []
         instruction = instruction.strip()
@@ -155,6 +166,6 @@ If "<ARGUMENT>" is absent, it will be added in the end of the prompt)
             other += ",".join(arguments[:i] + arguments[i:])
 
             fork = ToolFork(first_only=True)
-            result.extend(fork([concrete, other]))
+            result.extend(fork([concrete, other], history))
 
         return result
