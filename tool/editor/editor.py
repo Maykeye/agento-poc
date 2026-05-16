@@ -109,7 +109,7 @@ You are now in EDITOR MODE for file: {path}
 
 EDITOR MODE RULES:
 1. You are working with a buffered view of the file (showing {LINES} lines at a time)
-2. Line numbers are 1-indexed and displayed as 5-digit numbers (e.g., 00001, 00123)
+2. Line numbers are 1-indexed and displayed in the beginning of ```block```
 3. The buffer shows lines starting from your current line position
 4. You can navigate using: goto <line>, find_prev/find_next <regex>
 5. You can switch files using: edit_file <path>
@@ -199,17 +199,3 @@ Current buffer (starting from line 1):"""
                     if buffer_count > keep_count:
                         # Prune this tool output
                         msg["content"] = f"[PRUNED: Old {tool_name} output]"
-
-            # Check assistant messages with tool calls
-            elif msg.get("role") == "assistant":
-                tool_calls = msg.get("tool_calls", [])
-                for tc in tool_calls:
-                    func_name = tc.get("function", {}).get("name", "")
-                    if func_name in editor_tools:
-                        # This will be pruned when its output is pruned
-                        pass
-
-
-# ============================================================================
-# Editor-Specific Tools
-# ============================================================================
