@@ -120,24 +120,20 @@ class TestEditorFormatBuffer(TestEditorBase):
         buffer = ToolEditor._format_buffer("test.txt", 1, text)
 
         self.assertIn("[FILE: test.txt", buffer)
-        self.assertIn("00001|line1", buffer)
-        self.assertIn("00003|line3", buffer)
-
-        # Line 2 should NOT have a line number (not first, not last, not divisible by 10)
-        self.assertIn("     |line2", buffer)
+        self.assertIn("\nline1\n", buffer)
+        self.assertIn("\nline2\n", buffer)
+        self.assertEndsWith(buffer, "\nline3")
 
     def test_format_buffer_from_middle(self):
         """Test formatting buffer starting from middle of file."""
         text = "line1\nline2\nline3\nline4\nline5"
         buffer = ToolEditor._format_buffer("test.txt", 3, text)
 
-        self.assertIn("00003|line3", buffer)
-        self.assertIn("00005|line5", buffer)
-        self.assertNotIn("00001|line1", buffer)
-        self.assertNotIn("00002|line2", buffer)
-
-        # Line 4 should NOT have a line number (not first, not last, not divisible by 10)
-        self.assertIn("     |line4", buffer)
+        self.assertNotIn("line1", buffer)
+        self.assertNotIn("line2", buffer)
+        self.assertIn("\nline3\n", buffer)
+        self.assertIn("\nline4\n", buffer)
+        self.assertEndsWith(buffer, "\nline5")
 
     def test_format_buffer_respects_line_limit(self):
         """Test that buffer respects LINES limit."""
@@ -153,31 +149,25 @@ class TestEditorFormatBuffer(TestEditorBase):
 class TestEditorPrintBuffer(TestEditorBase):
     """Test print_buffer functionality."""
 
-    def test_print_buffer_shows_first_line_as_00001(self):
-        """Test that print_buffer shows the first line with 00001 prefix."""
+    def test_print_buffer_from_the_start(self):
+        """Test that print_buffer shows the."""
         self.init_editor_llm()
 
         print_tool = tool_editor.EditorToolPrint()
         result = print_tool()
 
         # Should return buffer output (string, not dict)
-        self.assertIsInstance(result, str)
+        assert isinstance(result, str)
 
         # Should contain file info
         self.assertIn("[FILE:", result)
         self.assertIn(self.FILE_TEST.name, result)
-
-        # Should show line 1 with 00001 prefix
-        self.assertIn("00001|line 1", result)
-
-        # Line 10 should have a line number (divisible by 10)
-        self.assertIn("00010|line 9", result)
-
-        # Lines 2-9 should NOT have line numbers (not first, not last, not divisible by 10)
-        self.assertIn("     |line 2", result)
-        self.assertIn("     |line 3", result)
-        self.assertIn("     |line 6", result)
-        self.assertIn("     |line 7", result)
+        self.assertIn("\nline 1\n", result)
+        self.assertIn("\nline 2\n", result)
+        self.assertIn("\nline 3\n", result)
+        self.assertIn("\nline 6\n", result)
+        self.assertIn("\nline 7\n", result)
+        self.assertEndsWith(result, "\nline 9")
 
 
 class TestEditorGoto(TestEditorBase):
@@ -195,8 +185,7 @@ class TestEditorGoto(TestEditorBase):
 
         # Result should contain buffer
         self.assertIn("Goto line 5", result)
-        # Line 5 is "    return 42;" (not "function test() {")
-        self.assertIn("00005|    return 42;", result)
+        self.assertIn("\n    return 42;\n", result)
 
     def test_goto_line_too_low(self):
         """Test goto to line number less than 1."""

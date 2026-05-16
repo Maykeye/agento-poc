@@ -148,23 +148,10 @@ Current buffer (starting from line 1):"""
         end_line = min(start_line + LINES - 1, total_lines)
 
         # Format lines with line numbers
-        buffer_lines = []
-        for i in range(start_line - 1, end_line):
-            line_num = i + 1  # Convert to 1-indexed
-            line_content = lines[i]
-
-            # Determine if we should show the line number
-            is_first_line = i == start_line - 1
-            is_last_line = i == end_line - 1
-            is_divisible_by_10 = line_num % 10 == 0
-
-            if is_first_line or is_last_line or is_divisible_by_10:
-                buffer_lines.append(f"{line_num:05d}|{line_content}")
-            else:
-                buffer_lines.append(f"     |{line_content}")
+        buffer_lines = [lines[i] for i in range(start_line - 1, end_line)]
 
         # Add file info at the top
-        info = f"[FILE: {path} | LINES: {start_line}-{end_line}/{total_lines}]"
+        info = f"[FILE: {path} | LINES: {start_line}..{end_line}/{total_lines}]"
 
         result = "\n".join([info] + buffer_lines)
         if not ToolEditor.SKIP_PRINTING:
