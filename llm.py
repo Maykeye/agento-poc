@@ -135,9 +135,18 @@ class LLM:
             else:
                 print("LLM.INSTANCES is empty", file=sys.stderr)
 
+    def estimate_pseudo_tokens(self, messages: list[dict]):
+        message_str = json.dumps(messages)
+        tools_str = "\n".join(
+            json.dumps(tool.llm_func_tool_info()) for tool in self.tools.values()
+        )
+        prompt = message_str + tools_str
+        return f"%% PSEUDO-TOKENS: {int(len(prompt)//6)}"
+
     def _generate(self, messages: list[dict]) -> Response:
         """Generate response. If tools to be called, will recurisvely call itself and return last response. If calling tools is not desired, create new LLM instance with empty tools"""
 
+        print(self.estimate_pseudo_tokens(messages))
         context_handler().prepare_current_llm(self)
 
         payload = {
