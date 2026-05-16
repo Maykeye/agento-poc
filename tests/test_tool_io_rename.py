@@ -7,7 +7,6 @@ from config import CONFIG
 from context.suffix import SuffixHandler
 from tool import io as tool_io
 from context import context_handler, ContextMode, set_context_mode
-from context.prefix import CONTEXTS as PREFIX_CONTEXTS
 from tests.test_helper import TestBase, tmpfilename
 
 
@@ -67,80 +66,6 @@ class TestToolRenameConstraints(TestBase):
         finally:
             src_file.unlink(True)
             dest_file.unlink(True)
-
-
-class TestToolRenamePrefix(TestBase):
-    """Test ToolRename with prefix context handler."""
-
-    def setUp(self):
-        super().setUp()
-        PREFIX_CONTEXTS.clear()
-        set_context_mode(ContextMode.PREFIX)
-
-    def test_rename_file_not_read(self):
-        """Test rename when file was not read in prefix context."""
-        try:
-            result = tool_io.ToolRename()(self.FILE_FOO.name, "new_foo.txt")
-            self.assertIsInstance(result, str)
-            self.assertIn(" OK:", result)
-            self.assertNotIn(self.FILE_FOO.name, PREFIX_CONTEXTS)
-            self.assertNotIn("new_foo.txt", PREFIX_CONTEXTS)
-            self.assertFalse(self.FILE_FOO.exists())
-            self.assertTrue(Path("new_foo.txt").exists())
-        finally:
-            Path("new_foo.txt").unlink()
-
-    def test_rename_file_was_read(self):
-        """Test rename when file was read in prefix context."""
-        # Read the file first
-
-        context_handler().update(self.FILE_FOO.name, "foo\ntext", "read_file")
-
-        try:
-            result = tool_io.ToolRename()(self.FILE_FOO.name, "new_foo.txt")
-
-            self.assertIsInstance(result, str)
-            self.assertIn(" OK:", result)
-            self.assertNotIn(self.FILE_FOO.name, PREFIX_CONTEXTS)
-            self.assertIn("new_foo.txt", PREFIX_CONTEXTS)
-            self.assertEqual(PREFIX_CONTEXTS["new_foo.txt"].text, "foo\ntext")
-            self.assertEqual(PREFIX_CONTEXTS["new_foo.txt"].operation, "rename_file")
-            self.assertFalse(self.FILE_FOO.exists())
-            self.assertTrue(Path("new_foo.txt").exists())
-        finally:
-            Path("new_foo.txt").unlink(missing_ok=True)
-
-    def test_rename_file_was_read_twice(self):
-        """Test rename when file was read, then renamed twice."""
-
-        # Read the file first
-        context_handler().update(self.FILE_FOO.name, "foo\ntext", "read_file")
-        self.assertIn(self.FILE_FOO.name, PREFIX_CONTEXTS)
-        try:
-            # First rename
-            result1 = tool_io.ToolRename()(self.FILE_FOO.name, "new_foo.txt")
-            self.assertIsInstance(result1, str)
-            self.assertIn("OK", result1)
-            self.assertNotIn(self.FILE_FOO.name, PREFIX_CONTEXTS)
-            self.assertIn("new_foo.txt", PREFIX_CONTEXTS)
-            self.assertEqual(PREFIX_CONTEXTS["new_foo.txt"].operation, "rename_file")
-
-            # Second rename
-            result2 = tool_io.ToolRename()("new_foo.txt", "final_foo.txt")
-            self.assertIsInstance(result2, str)
-            self.assertIn("OK", result2)
-            self.assertNotIn("new_foo.txt", PREFIX_CONTEXTS)
-            self.assertIn("final_foo.txt", PREFIX_CONTEXTS)
-            self.assertEqual(PREFIX_CONTEXTS["final_foo.txt"].text, "foo\ntext")
-            self.assertEqual(PREFIX_CONTEXTS["final_foo.txt"].operation, "rename_file")
-
-            # Check file was actually renamed
-            self.assertFalse(self.FILE_FOO.exists())
-            self.assertFalse(Path("new_foo.txt").exists())
-            self.assertTrue(Path("final_foo.txt").exists())
-        finally:
-            Path("final_foo.txt").unlink(missing_ok=True)
-            Path("new_foo.txt").unlink(missing_ok=True)
 
 
 class TestToolRenameSuffix(TestBase):

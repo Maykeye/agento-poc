@@ -6,7 +6,6 @@ Note: Do not read all the files. They are given to you to avoid `ls`ing around a
 
 - `context/context.py` has methods for getting, setting context handler
 - `context/raw.py` most basic, raw implementation
-- `context/prefix.py` deprecated prefix implementation which keeps history of changes in the first message
 - `context/suffix.py` current advanced suffix implementation which keeps history of changes in last messages and prunes earlier messages
 
 # Tools
@@ -48,7 +47,6 @@ To run tests use pass to unittest `discover -s tests`
 
 #### Context
 - tests/test_context.py
-- tests/test_context_prefix.py
 - tests/test_context_raw.py
 - tests/test_context_suffix.py
 - tests/test_context_suffix_prune.py

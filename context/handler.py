@@ -1,6 +1,5 @@
 from context.context_handler import ContextMode, ContextEntry, ContextHandler
 from context.raw import RawHandler
-from context.prefix import PrefixHandler
 from context.suffix import SuffixHandler
 
 
@@ -11,8 +10,6 @@ def set_context_mode(value: ContextMode, reset_ctx_id=False):
     match value:
         case ContextMode.RAW:
             _CONTEXT_HANDLER = RawHandler()
-        case ContextMode.PREFIX:
-            _CONTEXT_HANDLER = PrefixHandler()
         case ContextMode.SUFFIX:
             _CONTEXT_HANDLER = SuffixHandler()
 
@@ -27,4 +24,5 @@ def context_handler():
 def llm_instance():
     """Get the current LLM instance."""
     from llm import LLM
+
     return LLM.INSTANCES[-1].llm if LLM.INSTANCES else None

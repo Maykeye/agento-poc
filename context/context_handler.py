@@ -18,7 +18,6 @@ class ContextEntry:
 
 class ContextMode(StrEnum):
     RAW = "raw"
-    PREFIX = "prefix"
     SUFFIX = "suffix"
 
 

@@ -3,7 +3,6 @@
 import json
 import unittest
 from context import ContextMode, set_context_mode
-from context.prefix import CONTEXTS
 from llm import LLM
 from tool import io as tool_io
 from tests.test_helper import TestBase
@@ -34,31 +33,6 @@ class TestCloseFile(TestBase):
         self.assertIn("OK", res)
         self.assertIn("close_file", res)
         self.assertIn(self.FILE_FOO.name, res)
-
-    def test_close_file_prefix_mode(self):
-        """Test close_file in PREFIX context mode (removes from CONTEXTS)."""
-        set_context_mode(ContextMode.PREFIX)
-
-        self.init_test_llm()
-
-        # Read the file first
-        self.tool_call_read(self.FILE_FOO)
-
-        # Verify file is in CONTEXTS
-        assert self.FILE_FOO.name in CONTEXTS, "File should be in CONTEXTS after read"
-
-        # Close the file
-        res = self.tool_call(
-            self.close, files=[self.FILE_FOO.name], reason="no longer needed"
-        )
-
-        # Verify success
-        self.assertIn("OK", res)
-
-        # Verify file was removed from CONTEXTS
-        assert (
-            self.FILE_FOO.name not in CONTEXTS
-        ), "File should be removed from CONTEXTS after close"
 
     def test_close_file_suffix_mode_basic(self):
         """Test close_file in SUFFIX context mode (basic functionality)."""
@@ -243,42 +217,6 @@ class TestCloseFile(TestBase):
         self.assertIn(self.FILE_FOO.name, res)
         self.assertIn(self.FILE_BAR.name, res)
 
-    def test_close_multiple_files_prefix_mode(self):
-        """Test closing multiple files at once in PREFIX context mode."""
-        set_context_mode(ContextMode.PREFIX)
-
-        self.init_test_llm()
-
-        # Read both files first
-        self.tool_call_read(self.FILE_FOO)
-        self.tool_call_read(self.FILE_BAR)
-
-        # Verify both files are in CONTEXTS
-        assert (
-            self.FILE_FOO.name in CONTEXTS
-        ), "FILE_FOO should be in CONTEXTS after read"
-        assert (
-            self.FILE_BAR.name in CONTEXTS
-        ), "FILE_BAR should be in CONTEXTS after read"
-
-        # Close both files at once
-        res = self.tool_call(
-            self.close,
-            files=[self.FILE_FOO.name, self.FILE_BAR.name],
-            reason="finished reading",
-        )
-
-        # Verify success
-        self.assertIn("OK", res)
-
-        # Verify both files were removed from CONTEXTS
-        assert (
-            self.FILE_FOO.name not in CONTEXTS
-        ), "FILE_FOO should be removed from CONTEXTS"
-        assert (
-            self.FILE_BAR.name not in CONTEXTS
-        ), "FILE_BAR should be removed from CONTEXTS"
-
     def test_close_multiple_files_suffix_mode(self):
         """Test closing multiple files at once in SUFFIX context mode."""
         set_context_mode(ContextMode.SUFFIX)
@@ -373,39 +311,6 @@ class TestCloseFile(TestBase):
                     break
 
         assert found_reopened_content, "File content should be readable after reopening"
-
-    def test_reopen_file_after_close_prefix_mode(self):
-        """Test that a file can be reopened after being closed in PREFIX mode."""
-        set_context_mode(ContextMode.PREFIX)
-
-        self.init_test_llm()
-
-        # Read the file
-        self.tool_call_read(self.FILE_FOO)
-        assert self.FILE_FOO.name in CONTEXTS, "File should be in CONTEXTS after read"
-
-        # Close the file
-        self.tool_call(
-            self.close, files=[self.FILE_FOO.name], reason="temporarily done"
-        )
-
-        # Verify file was removed from CONTEXTS
-        assert (
-            self.FILE_FOO.name not in CONTEXTS
-        ), "File should be removed from CONTEXTS"
-
-        # Reopen the file
-        self.tool_call_read(self.FILE_FOO)
-
-        # Verify file is back in CONTEXTS
-        assert (
-            self.FILE_FOO.name in CONTEXTS
-        ), "File should be in CONTEXTS after reopening"
-
-        # Verify content is correct
-        assert (
-            CONTEXTS[self.FILE_FOO.name].text == "foo\ntext"
-        ), "File content should match"
 
     def test_reopen_file_after_close_suffix_mode(self):
         """Test that a file can be reopened after being closed in SUFFIX mode."""
