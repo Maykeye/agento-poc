@@ -53,6 +53,9 @@ Note. If you are a subagent, don't fork your task.
         result = []
 
         for i, instruction in enumerate(instructions):
+            if instruction.strip() == "":
+                result.append("(fork aborted: instruction was empty)")
+                continue
             llm = LLM.INSTANCES[-1].llm.clone()
             fork_messages = copy.deepcopy(original_messages)
             # Remove the parent's tool call from the clone's memory
@@ -138,7 +141,7 @@ If "<ARGUMENT>" is absent, it will be added in the end of the prompt)
 """.strip(),
         )
 
-    def build_prompt(self, instruction: str, arg: str):
+    def build_prompt(self, instruction: str, arg: str) -> str:
         concrete = instruction.replace("<ARGUMENT>", arg)
         if concrete == instruction:
             concrete = instruction + f"\nTarget: {arg}"
@@ -160,6 +163,9 @@ If "<ARGUMENT>" is absent, it will be added in the end of the prompt)
         instruction = instruction.strip()
 
         for i, arg in enumerate(arguments):
+            if arg.strip() == "":
+                result.append("(fork aborted: instruction argument was empty)")
+                continue
             concrete = self.build_prompt(instruction, arg)
 
             other = f"The same task, but for targets "
