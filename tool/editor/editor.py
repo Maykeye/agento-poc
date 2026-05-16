@@ -152,8 +152,10 @@ Current buffer (starting from line 1):"""
 
         # Add file info at the top
         info = f"[FILE: {path} | LINES: {start_line}..{end_line}/{total_lines}]"
+        info += "\n```"
 
         result = "\n".join([info] + buffer_lines)
+        result += "\n```"
         if not ToolEditor.SKIP_PRINTING:
             print(result)
         return result

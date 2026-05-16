@@ -122,7 +122,7 @@ class TestEditorFormatBuffer(TestEditorBase):
         self.assertIn("[FILE: test.txt", buffer)
         self.assertIn("\nline1\n", buffer)
         self.assertIn("\nline2\n", buffer)
-        self.assertEndsWith(buffer, "\nline3")
+        self.assertEndsWith(buffer, "\nline3\n```")
 
     def test_format_buffer_from_middle(self):
         """Test formatting buffer starting from middle of file."""
@@ -133,7 +133,7 @@ class TestEditorFormatBuffer(TestEditorBase):
         self.assertNotIn("line2", buffer)
         self.assertIn("\nline3\n", buffer)
         self.assertIn("\nline4\n", buffer)
-        self.assertEndsWith(buffer, "\nline5")
+        self.assertEndsWith(buffer, "\nline5\n```")
 
     def test_format_buffer_respects_line_limit(self):
         """Test that buffer respects LINES limit."""
@@ -167,7 +167,7 @@ class TestEditorPrintBuffer(TestEditorBase):
         self.assertIn("\nline 3\n", result)
         self.assertIn("\nline 6\n", result)
         self.assertIn("\nline 7\n", result)
-        self.assertEndsWith(result, "\nline 9")
+        self.assertEndsWith(result, "\nline 9\n```")
 
 
 class TestEditorGoto(TestEditorBase):
