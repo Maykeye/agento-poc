@@ -13,7 +13,7 @@ class EditorToolSed(Tool):
     def __init__(self):
         super().__init__(
             name="sed",
-            description="Run sed on a file with given script. Then queries subagent if result is appropriate and sed outputs should be written to a file. This way you can edit file(by accepting changes) or just query it(by rejecting). Highly recommended to use this tool over any other",
+            description="Run `sed -n` on a file with given script. Then queries subagent if result is appropriate and sed outputs should be written to a file. This way you can edit file(by accepting changes) or just query it(by rejecting). Highly recommended to use this tool over any other.",
         )
         self.debug_assumed_decision = ""
 
@@ -23,7 +23,10 @@ class EditorToolSed(Tool):
             str,
             "Project path to the file to process. Must exactly match the current editing file to confirm intention is to edit it",
         ],
-        script: Annotated[str, "sed script/expression to apply"],
+        script: Annotated[
+            str,
+            "sed script/expression to apply.",
+        ],
     ):
         p = real_path(path)
 
@@ -59,7 +62,7 @@ class EditorToolSed(Tool):
         original_text = p.read_text()
 
         # Run sed with the file content as stdin
-        result = run_executable(["sed", script], stdin_text=original_text)
+        result = run_executable(["sed", "-n", script], stdin_text=original_text)
 
         if result.get("exitcode", -1) != 0:
             return {
