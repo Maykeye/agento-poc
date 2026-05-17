@@ -141,7 +141,7 @@ class LLM:
             json.dumps(tool.llm_func_tool_info()) for tool in self.tools.values()
         )
         prompt = message_str + tools_str
-        return f"%% PSEUDO-TOKENS: {int(len(prompt)//6)}"
+        return f"%% PSEUDO-TOKENS: {int(len(prompt)//4)}"
 
     def _generate(self, messages: list[dict]) -> Response:
         """Generate response. If tools to be called, will recurisvely call itself and return last response. If calling tools is not desired, create new LLM instance with empty tools"""

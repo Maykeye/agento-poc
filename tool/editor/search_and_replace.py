@@ -93,22 +93,23 @@ Use search_and_replace for simple, one-or-all replacements. Use `sed` for more p
         if isinstance(write_result, dict) and "error" in write_result:
             return write_result
 
+        diff = utils.diff_gen(full_text, new_full_text, path)
+
         # Format success output
         output_lines = []
         output_lines.append(f"Replaced text in {path}")
         output_lines.append(f"  From: {repr(replace_from)}")
         output_lines.append(f"  To:   {repr(replace_with)}")
-        output_lines.append("```diff\n")
-
-        diff = utils.diff_gen(full_text, new_full_text, path)
+        output_lines.append("```diff")
         output_lines.extend(diff)
-        output_lines.append("Diff:\n```")
+        output_lines.append("```")
 
         # Prune old buffers
         messages = LLM.INSTANCES[-1].messages
         ToolEditor._prune_old_buffers(messages)
 
-        return "\n".join(output_lines)
+        result = "\n".join(output_lines)
+        return result
 
 
 EDITOR_TOOLS.append(EditorToolSearchReplace)

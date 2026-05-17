@@ -211,6 +211,7 @@ LINE104
 
         assert isinstance(result, str)
         assert "Inserted 3 line(s)" in result
+        assert "+Insert1\n+Insert2\n+Insert3" in result
 
         content = self.FILE_TEST.read_text()
         lines = content.splitlines()

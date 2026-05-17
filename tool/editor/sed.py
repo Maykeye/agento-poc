@@ -71,7 +71,7 @@ class EditorToolSed(Tool):
         sed_output = result.get("stdout", "")
 
         # Generate diff -u between original and sed output
-        diff_text = "".join(diff_gen(original_text, sed_output, path))
+        diff_text = "\n".join(diff_gen(original_text, sed_output, path))
 
         accept, decision = self.get_decision(diff_text)
         if accept:

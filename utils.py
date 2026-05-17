@@ -68,16 +68,14 @@ def data_tag(tag: str, value: str):
     return f"<{tag}>\n{value}\n</{tag}>"
 
 
-def diff_gen(old_file: str, new_file: str, path: str) -> list[str]:
-    return [
-        x.removesuffix("\n")
-        for x in difflib.unified_diff(
-            old_file.splitlines(True),
-            new_file.splitlines(True),
-            f"a/{path}",
-            f"b/{path}",
-        )
-    ]
+def diff_gen(old_file: str, new_file: str, path: str) -> Iterable[str]:
+    return difflib.unified_diff(
+        old_file.splitlines(),
+        new_file.splitlines(),
+        f"a/{path}",
+        f"b/{path}",
+        lineterm="",
+    )
 
 
 def extract_tag(text: str, tag: str, strip=True) -> str:
