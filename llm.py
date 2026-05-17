@@ -94,6 +94,7 @@ class LLM:
         # TODO: copy or not callback?
         llm = copy.deepcopy(self)
         llm.callback = self.callback
+        llm.llm_id = utilsql.llm_id()
         return llm
 
     def add_tool(self, tool: Tool):
