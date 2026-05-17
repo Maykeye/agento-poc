@@ -1,12 +1,11 @@
 # File with sed tool that runs sed on a file
 import copy
 from typing import Annotated
-import difflib
 from tool import Tool, run_executable
 from config import real_path
 from llm import LLM
 from tool.editor.editor import ToolEditor
-from utils import extract_tag
+from utils import extract_tag, diff_gen
 from tool.editor.tool_list import EDITOR_TOOLS
 
 
@@ -14,7 +13,7 @@ class EditorToolSed(Tool):
     def __init__(self):
         super().__init__(
             name="sed",
-            description="Run sed on a file with given script. Then queries subagent if result is appropriate and sed outputs should be written to a file. This way you can edit file(by accepting changes) or just query it(by rejecting)",
+            description="Run sed on a file with given script. Then queries subagent if result is appropriate and sed outputs should be written to a file. This way you can edit file(by accepting changes) or just query it(by rejecting). Highly recommended to use this tool over any other",
         )
         self.debug_assumed_decision = ""
 
@@ -72,16 +71,7 @@ class EditorToolSed(Tool):
         sed_output = result.get("stdout", "")
 
         # Generate diff -u between original and sed output
-        original_lines = original_text.splitlines(keepends=True)
-        sed_lines = sed_output.splitlines(keepends=True)
-
-        diff = difflib.unified_diff(
-            original_lines,
-            sed_lines,
-            fromfile=f"a/{path}",
-            tofile=f"b/{path}",
-        )
-        diff_text = "".join(diff) if diff else ""
+        diff_text = "".join(diff_gen(original_text, sed_output, path))
 
         accept, decision = self.get_decision(diff_text)
         if accept:

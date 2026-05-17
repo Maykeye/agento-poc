@@ -32,7 +32,7 @@ class TestEditorSwitch(TestBase):
         ToolEditor.init_editor_tools(editor_llm)
 
         llm_id = id(editor_llm)
-        ToolEditor._state[llm_id] = EditorEntry(self.FILE_FOO.name, 1)
+        ToolEditor._state[llm_id] = EditorEntry(self.FILE_FOO.name)
 
         # Add editor mode message
         msgs.append(
@@ -57,7 +57,6 @@ class TestEditorSwitch(TestBase):
 
         # Verify the editor state was updated
         self.assertEqual(ToolEditor._state[llm_id].path, self.FILE_BAR.name)
-        self.assertEqual(ToolEditor._state[llm_id].current_line, 1)
 
     def test_switch_file_nonexistent(self):
         """Test switching to a non-existent file fails gracefully."""
@@ -69,7 +68,7 @@ class TestEditorSwitch(TestBase):
         ToolEditor.init_editor_tools(editor_llm)
 
         llm_id = id(editor_llm)
-        ToolEditor._state[llm_id] = EditorEntry(self.FILE_FOO.name, 1)
+        ToolEditor._state[llm_id] = EditorEntry(self.FILE_FOO.name)
 
         LLM.INSTANCES.append(LlmInstace(editor_llm, msgs))
 
@@ -77,10 +76,9 @@ class TestEditorSwitch(TestBase):
         switch_tool = tool_editor.EditorToolEditFile()
         result = switch_tool("nonexistent.txt")
 
-        # Should get an error
-        assert isinstance(result, dict)
-        self.assertIn("error", result)
-        self.assertIn("does not exist", result["error"])
+        # Should get a string
+        assert isinstance(result, str)
+        self.assertIn("First 0 lines (total: 0)", result)
 
     def test_switch_file_empty(self):
         """Test switching to an empty file - should now succeed."""
@@ -93,7 +91,7 @@ class TestEditorSwitch(TestBase):
         ToolEditor.init_editor_tools(editor_llm)
 
         llm_id = id(editor_llm)
-        ToolEditor._state[llm_id] = EditorEntry(self.FILE_FOO.name, 1)
+        ToolEditor._state[llm_id] = EditorEntry(self.FILE_FOO.name)
 
         LLM.INSTANCES.append(LlmInstace(editor_llm, msgs))
 
@@ -109,7 +107,6 @@ class TestEditorSwitch(TestBase):
 
         # Verify the editor state was updated
         self.assertEqual(ToolEditor._state[llm_id].path, self.FILE_BAR.name)
-        self.assertEqual(ToolEditor._state[llm_id].current_line, 1)
 
     def test_switch_file_not_in_editor_mode(self):
         """Test switching file when not in editor mode fails."""
@@ -136,7 +133,7 @@ class TestEditorSwitch(TestBase):
         ToolEditor.init_editor_tools(editor_llm)
 
         llm_id = id(editor_llm)
-        ToolEditor._state[llm_id] = EditorEntry(self.FILE_FOO.name, 1)
+        ToolEditor._state[llm_id] = EditorEntry(self.FILE_FOO.name)
 
         # Add many buffer messages to simulate old buffers
         for i in range(10):
@@ -144,7 +141,7 @@ class TestEditorSwitch(TestBase):
                 {
                     "role": "tool",
                     "tool_call_id": f"print#{i}",
-                    "name": "print_buffer",
+                    "name": "read_file",
                     "content": f"Buffer output {i}",
                 }
             )
@@ -161,7 +158,7 @@ class TestEditorSwitch(TestBase):
             1
             for msg in msgs
             if msg.get("role") == "tool"
-            and msg.get("name") == "print_buffer"
+            and msg.get("name") == "read_file"
             and "PRUNED" in msg.get("content", "")
         )
 

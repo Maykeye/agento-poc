@@ -230,7 +230,7 @@ class TestBase(unittest.TestCase):
 
         # Set up editor state
         llm_id = id(editor_llm)
-        ToolEditor._state[llm_id] = EditorEntry(self.FILE_FOO.name, 1)
+        ToolEditor._state[llm_id] = EditorEntry(self.FILE_FOO.name)
 
         # Prepare messages
         editor_msgs = main_llm.messages() + [

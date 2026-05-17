@@ -52,7 +52,7 @@ LINE104
 
         # Set up editor state
         llm_id = id(editor_llm)
-        ToolEditor._state[llm_id] = EditorEntry(self.FILE_TEST.name, 1)
+        ToolEditor._state[llm_id] = EditorEntry(self.FILE_TEST.name)
 
         # Prepare messages
         editor_msgs = [

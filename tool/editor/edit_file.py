@@ -18,9 +18,8 @@ class EditorToolEditFile(Tool):
 This tool allows you to switch to a new file without exiting editor mode.
 
 REQUIREMENTS:
-- The new file must exist
 - After switching, the editor continues with the new file starting from line 1
-- Empty files will be initialized with empty content
+- Non-existing files will be initialized with empty content
 
 Use this when you need to edit other file from the current one quckly, but it's preferrably to finish_editing and in report state what needs to be edited.""",
         )
@@ -41,10 +40,7 @@ Use this when you need to edit other file from the current one quckly, but it's 
         p = real_path(path)
 
         if not p.exists():
-            return {
-                "error": f"File {path} does not exist",
-                "suggestion": "Use write_file to create a new file first",
-            }
+            p.write_text("")
 
         if not p.is_file():
             return {"error": f"{path} is not a file"}
@@ -67,16 +63,19 @@ Use this when you need to edit other file from the current one quckly, but it's 
 
         # Update editing state to the new file
         old_file = ToolEditor._state[llm_id]
-        ToolEditor._state[llm_id] = EditorEntry(path, 1)
+        ToolEditor._state[llm_id] = EditorEntry(path)
 
         # Format output
         output_lines = []
         output_lines.append(f"Switching from '{old_file}' to '{path}'")
-        output_lines.append("")
-
-        # Print buffer from line 1 of new file
-        buffer_output = ToolEditor._format_buffer(path, 1, new_text)
-        output_lines.append(buffer_output)
+        all_lines = new_text.splitlines()
+        start_lines = all_lines[:50]
+        output_lines.append(
+            f"First {len(start_lines)} lines (total: {len(all_lines)}):"
+        )
+        output_lines.append("```")
+        output_lines.extend(start_lines)
+        output_lines.append("```")
 
         return "\n".join(output_lines)
 

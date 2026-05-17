@@ -6,7 +6,7 @@ from context import set_context_mode
 from context.context_handler import ContextMode
 from llm import LLM, LlmInstace, FinishGeneration
 import tool.editor as tool_editor
-from tool.editor.editor import EditorEntry, ToolEditor, LINES, KEEP_OLD_BUFFERS
+from tool.editor.editor import EditorEntry, ToolEditor, KEEP_OLD_BUFFERS
 from tests.test_helper import TestBase, tmpfilename
 import json
 
@@ -97,7 +97,7 @@ line 9"""
 
         # Set up editor state
         llm_id = id(editor_llm)
-        ToolEditor._state[llm_id] = EditorEntry(self.FILE_TEST.name, 1)
+        ToolEditor._state[llm_id] = EditorEntry(self.FILE_TEST.name)
 
         # Prepare messages
         editor_msgs = main_llm.messages() + [
@@ -111,103 +111,6 @@ line 9"""
         return llm_id
 
 
-class TestEditorFormatBuffer(TestEditorBase):
-    """Test buffer formatting."""
-
-    def test_format_buffer_from_start(self):
-        """Test formatting buffer starting from line 1."""
-        text = "line1\nline2\nline3"
-        buffer = ToolEditor._format_buffer("test.txt", 1, text)
-
-        self.assertIn("[FILE: test.txt", buffer)
-        self.assertIn("\nline1\n", buffer)
-        self.assertIn("\nline2\n", buffer)
-        self.assertEndsWith(buffer, "\nline3\n```")
-
-    def test_format_buffer_from_middle(self):
-        """Test formatting buffer starting from middle of file."""
-        text = "line1\nline2\nline3\nline4\nline5"
-        buffer = ToolEditor._format_buffer("test.txt", 3, text)
-
-        self.assertNotIn("line1", buffer)
-        self.assertNotIn("line2", buffer)
-        self.assertIn("\nline3\n", buffer)
-        self.assertIn("\nline4\n", buffer)
-        self.assertEndsWith(buffer, "\nline5\n```")
-
-    def test_format_buffer_respects_line_limit(self):
-        """Test that buffer respects LINES limit."""
-        # Create file with more than LINES lines
-        text = "\n".join([f"line{i}" for i in range(1, LINES + 10)])
-        buffer = ToolEditor._format_buffer("test.txt", 1, text)
-
-        # Should show at most LINES lines
-        lines_shown = [l for l in buffer.split("\n") if l.startswith("0")]
-        self.assertLessEqual(len(lines_shown), LINES)
-
-
-class TestEditorPrintBuffer(TestEditorBase):
-    """Test print_buffer functionality."""
-
-    def test_print_buffer_from_the_start(self):
-        """Test that print_buffer shows the."""
-        self.init_editor_llm()
-
-        print_tool = tool_editor.EditorToolPrint()
-        result = print_tool()
-
-        # Should return buffer output (string, not dict)
-        assert isinstance(result, str)
-
-        # Should contain file info
-        self.assertIn("[FILE:", result)
-        self.assertIn(self.FILE_TEST.name, result)
-        self.assertIn("\nline 1\n", result)
-        self.assertIn("\nline 2\n", result)
-        self.assertIn("\nline 3\n", result)
-        self.assertIn("\nline 6\n", result)
-        self.assertIn("\nline 7\n", result)
-        self.assertEndsWith(result, "\nline 9\n```")
-
-
-class TestEditorGoto(TestEditorBase):
-    """Test goto functionality."""
-
-    def test_goto_valid_line(self):
-        """Test goto to a valid line."""
-        llm_id = self.init_editor_llm()
-
-        goto_tool = tool_editor.EditorToolGoto()
-        result = goto_tool(line_number=5)
-
-        # Should update current line
-        self.assertEqual(ToolEditor._state[llm_id].current_line, 5)
-
-        # Result should contain buffer
-        self.assertIn("Goto line 5", result)
-        self.assertIn("\n    return 42;\n", result)
-
-    def test_goto_line_too_low(self):
-        """Test goto to line number less than 1."""
-        self.init_editor_llm()
-
-        goto_tool = tool_editor.EditorToolGoto()
-        result = goto_tool(line_number=0)
-
-        self.assertInText("error", result)
-        self.assertInText(">= 1", result)
-
-    def test_goto_line_too_high(self):
-        """Test goto to line number beyond file length."""
-        self.init_editor_llm()
-
-        goto_tool = tool_editor.EditorToolGoto()
-        result = goto_tool(line_number=100)
-
-        self.assertInText("error", result)
-        self.assertInText("exceeds", result)
-
-
 class TestEditorEditFile(TestEditorBase):
     """Test edit_file functionality (buffer-only replacement)."""
 
@@ -217,7 +120,9 @@ class TestEditorEditFile(TestEditorBase):
 
         edit_tool = tool_editor.EditorToolSearchReplace()
         result = edit_tool(
-            replace_from="function test() {", replace_with="MODIFIED function test() {"
+            replace_from="function test() {",
+            replace_with="MODIFIED function test() {",
+            replace_all=False,
         )
 
         # Should succeed (result is a string, not dict)
@@ -229,22 +134,7 @@ class TestEditorEditFile(TestEditorBase):
         content = self.FILE_TEST.read_text()
         self.assertIn("MODIFIED function test() {", content)
 
-    def test_edit_file_not_in_buffer(self):
-        """Test edit when text is not in current buffer."""
-        llm_id = self.init_editor_llm()
-
-        # Go to line 10 (so line 1 is not in buffer)
-        ToolEditor._state[llm_id].current_line = 10
-
-        edit_tool = tool_editor.EditorToolSearchReplace()
-        result = edit_tool(replace_from="line 1", replace_with="MODIFIED")
-
-        # Should fail - text not in buffer (returns dict)
-        self.assertIsInstance(result, dict)
-        self.assertIn("error", result)
-        self.assertDictHasKeyContains("error", result, "not found in current buffer")
-
-    def test_edit_file_multiple_occurrences(self):
+    def test_edit_file_multiple_occurrences1(self):
         """Test edit when text appears multiple times in buffer."""
         # Create file with duplicate text
         duplicate_content = "duplicate\nduplicate\nduplicate"
@@ -253,13 +143,32 @@ class TestEditorEditFile(TestEditorBase):
         self.init_editor_llm()
 
         edit_tool = tool_editor.EditorToolSearchReplace()
-        result = edit_tool(replace_from="duplicate", replace_with="unique")
+        result = edit_tool(
+            replace_from="duplicate", replace_with="unique", replace_all=False
+        )
 
         # Should fail - multiple occurrences (returns dict)
-        self.assertIsInstance(result, dict)
+        assert isinstance(result, dict)
         self.assertIn("error", result)
         self.assertDictHasKeyContains("error", result, "appears")
         self.assertDictHasKeyContains("error", result, "must be exactly once")
+
+    def test_edit_file_multiple_occurrences2(self):
+        """Test edit when text appears multiple times in buffer."""
+        # Create file with duplicate text
+        duplicate_content = "duplicate\nduplicate\nduplicate"
+        self.FILE_TEST.write_text(duplicate_content)
+
+        self.init_editor_llm()
+
+        edit_tool = tool_editor.EditorToolSearchReplace()
+        result = edit_tool(
+            replace_from="duplicate", replace_with="unique", replace_all=True
+        )
+
+        # Should succeed - multiple occurrences (returns dict)
+        assert isinstance(result, str)
+        self.assertIn("-duplicate\n" * 3 + "+unique\n" * 3, result)
 
 
 class TestEditorAppend(TestEditorBase):
@@ -515,7 +424,7 @@ class TestEditorQuitBehavior(TestEditorBase):
 
         # Set up editor state
         editor_llm_id = id(editor_llm)
-        ToolEditor._state[editor_llm_id] = EditorEntry(self.FILE_TEST.name, 5)
+        ToolEditor._state[editor_llm_id] = EditorEntry(self.FILE_TEST.name)
 
         # Assert there are 2 LLM instances before quitting
         self.assertEqual(len(LLM.INSTANCES), 2)
@@ -569,7 +478,7 @@ class TestEditorQuitBehavior(TestEditorBase):
 
         # Set up editor state
         editor_llm_id = id(editor_llm)
-        ToolEditor._state[editor_llm_id] = EditorEntry(self.FILE_TEST.name, 10)
+        ToolEditor._state[editor_llm_id] = EditorEntry(self.FILE_TEST.name)
 
         # Assert there are 2 LLM instances before quitting
         self.assertEqual(len(LLM.INSTANCES), 2)

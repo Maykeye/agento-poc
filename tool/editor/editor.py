@@ -15,14 +15,12 @@ from tool import Tool
 from tool.editor.tool_list import EDITOR_TOOLS
 
 # Constants
-LINES = 250  # Size of buffer (number of lines to show)
-KEEP_OLD_BUFFERS = 5  # Number of buffer prints to keep in messages
+KEEP_OLD_BUFFERS = 5  # Number of tool calls contexts to keep
 
 
 @dataclass
 class EditorEntry:
     path: str
-    current_line: int  # 1 indexed
 
 
 class ToolEditor(Tool):
@@ -87,7 +85,7 @@ Empty or non-existing files can be edited - they will be initialized with empty 
 
         # Store current line and file path for this LLM instance
         llm_id = id(editor_llm)
-        ToolEditor._state[llm_id] = EditorEntry(path, 1)
+        ToolEditor._state[llm_id] = EditorEntry(path)
 
         # Prepare messages for the editor LLM
         editor_messages = copy.deepcopy(original_messages)
@@ -108,18 +106,14 @@ Empty or non-existing files can be edited - they will be initialized with empty 
 You are now in EDITOR MODE for file: {path}
 
 EDITOR MODE RULES:
-1. You are working with a buffered view of the file (showing {LINES} lines at a time)
-2. Line numbers are 1-indexed and displayed in the beginning of ```block```
-3. The buffer shows lines starting from your current line position
-4. You can navigate using: goto <line>, find_prev/find_next <regex>
-5. You can switch files using: edit_file <path>
-6. When done, use finish_editing(report) to quit editing and continue other tasks(e.g. compilation)
-7. All tools except read work only on the current buffer view
-8. The current file path is: {path}
+1. You are editing {path}
+2. Line numbers are 1-indexed
+3. You can switch files using: edit_file <path>
+4. When done, use finish_editing(report) to quit editing and continue other tasks(e.g. compilation)
+5. All tools except read work only on the current buffer view
+6. The current file path is: {path}
 
-Current buffer (starting from line 1):"""
-                + "\n"
-                + ToolEditor._format_buffer(path, 1, text),
+Current buffer (starting from line 1):""",
             }
         )
 
@@ -130,35 +124,6 @@ Current buffer (starting from line 1):"""
         # (editor LLM instance will be cleaned up)
 
         return {"status": "editing_complete", "file": path, "result": result.content}
-
-    @staticmethod
-    def _format_buffer(path: str, start_line: int, full_text: str) -> str:
-        """Format a buffer view of the file starting from start_line (1-indexed).
-
-        Returns formatted text with line numbers.
-        Line numbers are shown only for:
-        - First line of buffer
-        - Last line of buffer
-        - Lines divisible by 10
-        """
-        lines = full_text.splitlines()
-        total_lines = len(lines)
-
-        # Calculate the range to display
-        end_line = min(start_line + LINES - 1, total_lines)
-
-        # Format lines with line numbers
-        buffer_lines = [lines[i] for i in range(start_line - 1, end_line)]
-
-        # Add file info at the top
-        info = f"[FILE: {path} | LINES: {start_line}..{end_line}/{total_lines}]"
-        info += "\n```"
-
-        result = "\n".join([info] + buffer_lines)
-        result += "\n```"
-        if not ToolEditor.SKIP_PRINTING:
-            print(result)
-        return result
 
     @staticmethod
     def _prune_old_buffers(messages: list[dict], keep_count: int = KEEP_OLD_BUFFERS):
@@ -173,7 +138,6 @@ Current buffer (starting from line 1):"""
         # Track buffer prints from the end
         buffer_count = 0
         editor_tools = {
-            "print_buffer",
             "find_prev",
             "find_next",
             "goto",
