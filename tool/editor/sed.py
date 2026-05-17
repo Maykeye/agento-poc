@@ -1,6 +1,7 @@
 # File with sed tool that runs sed on a file
 import copy
-from typing import Annotated
+from pathlib import Path
+from typing import Annotated, Union
 from tool import Tool, run_executable
 from config import real_path
 from llm import LLM
@@ -9,11 +10,31 @@ from utils import extract_tag, diff_gen
 from tool.editor.tool_list import EDITOR_TOOLS
 
 
-class EditorToolSed(Tool):
+def _initial_check(path: str) -> Union[tuple[None, dict], tuple[Path, None]]:
+    # Get current LLM instance
+    if not LLM.INSTANCES:
+        return None, {"error": "No LLM instance available"}
+
+    p = real_path(path)
+    if not p.exists():
+        return None, {path: "error", "error": f"File {path} doesn't exist"}
+    if not p.is_file():
+        return None, {path: "error", "error": f"Path {path} is not a file"}
+
+    llm = LLM.INSTANCES[-1].llm
+    llm_id = id(llm)
+
+    # Get current state
+    if llm_id not in ToolEditor._state:
+        return None, {"error": "No file being edited"}
+    return p, None
+
+
+class EditorToolSedEdit(Tool):
     def __init__(self):
         super().__init__(
-            name="sed",
-            description="Run `sed -n` on a file with given script. Then queries subagent if result is appropriate and sed outputs should be written to a file. This way you can edit file(by accepting changes) or just query it(by rejecting). Highly recommended to use this tool over any other.",
+            name="sed_edit",
+            description="Run `sed` on a file with given script to edit file. Then queries subagent if result is appropriate and sed outputs should be written to a file. This way you can edit file(by accepting changes) or just query it(by rejecting). Highly recommended to use this tool for editing text over any other.",
         )
         self.debug_assumed_decision = ""
 
@@ -28,30 +49,18 @@ class EditorToolSed(Tool):
             "sed script/expression to apply.",
         ],
     ):
-        p = real_path(path)
+        p, err = _initial_check(path)
+        if err is not None:
+            return err
+        assert p is not None
 
-        if not p.exists():
-            return {path: "error", "error": f"File {path} doesn't exist"}
-        if not p.is_file():
-            return {path: "error", "error": f"Path {path} is not a file"}
-
-        # Get current LLM instance
-        if not LLM.INSTANCES:
-            return {"error": "No LLM instance available"}
-
-        llm = LLM.INSTANCES[-1].llm
-        llm_id = id(llm)
-
-        # Get current state
-        if llm_id not in ToolEditor._state:
-            return {"error": "No file being edited"}
+        llm_id = id(LLM.INSTANCES[-1].llm)
 
         current_editing_path = ToolEditor._state[llm_id].path
-        provided_path = real_path(path)
         editing_path = real_path(current_editing_path)
 
         # Normalize paths for comparison (resolve to absolute paths)
-        if provided_path != editing_path:
+        if p != editing_path:
             return {
                 "error": f"Path mismatch",
                 "suggestion": f"You are editing '{current_editing_path}' but tried to edit to '{path}'. Use the correct path or use finish_editing() to exit and write_file() for a different file.",
@@ -62,7 +71,7 @@ class EditorToolSed(Tool):
         original_text = p.read_text()
 
         # Run sed with the file content as stdin
-        result = run_executable(["sed", "-n", script], stdin_text=original_text)
+        result = run_executable(["sed", script], stdin_text=original_text)
 
         if result.get("exitcode", -1) != 0:
             return {
@@ -142,4 +151,50 @@ class EditorToolSed(Tool):
         return confirmation
 
 
-EDITOR_TOOLS.append(EditorToolSed)
+class EditorToolSedQuery(Tool):
+    def __init__(self):
+        super().__init__(
+            name="sed_query",
+            description="Run `sed -n` on a file with given script to query state of the file. No changes will be saved, but sed output will be returned as-is. Use for commands like `p` command, no changes will be saved",
+        )
+        self.debug_assumed_decision = ""
+
+    def __call__(
+        self,
+        path: Annotated[
+            str,
+            "Project path to the file to process. Must exactly match the current editing file to confirm intention is to edit it",
+        ],
+        script: Annotated[
+            str,
+            "sed script/expression to apply.",
+        ],
+    ):
+        p, err = _initial_check(path)
+        if err is not None:
+            return err
+        assert p is not None
+
+        llm_id = id(LLM.INSTANCES[-1].llm)
+        current_editing_path = ToolEditor._state[llm_id].path
+        editing_path = real_path(current_editing_path)
+
+        # Normalize paths for comparison (resolve to absolute paths)
+        if p != editing_path:
+            return {
+                "error": f"Path mismatch",
+                "suggestion": f"You are editing '{current_editing_path}' but tried to edit to '{path}'. Use the correct path or use finish_editing() to exit and write_file() for a different file.",
+                "editing_file": current_editing_path,
+                "requested_path": path,
+            }
+
+        original_text = p.read_text()
+
+        # Run sed with the file content as stdin
+        result = run_executable(["sed", "-n", script], stdin_text=original_text)
+        sed_output = result.get("stdout", "")
+        return sed_output
+
+
+EDITOR_TOOLS.append(EditorToolSedEdit)
+EDITOR_TOOLS.append(EditorToolSedQuery)

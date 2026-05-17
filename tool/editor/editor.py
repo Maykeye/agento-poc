@@ -137,19 +137,6 @@ Current buffer (starting from line 1):""",
 
         # Track buffer prints from the end
         buffer_count = 0
-        editor_tools = {
-            "find_prev",
-            "find_next",
-            "goto",
-            "patch_current_file",
-            "patch_suffix",
-            "edit_file",
-            "read_file",
-            "write_file",
-            "finish_editing",
-            "insert_before",
-            "insert_after",
-        }
 
         # Iterate backwards
         for msg_idx in range(len(messages) - 1, -1, -1):
@@ -158,8 +145,7 @@ Current buffer (starting from line 1):""",
             # Check tool output messages
             if msg.get("role") == "tool":
                 tool_name = msg.get("name", "")
-                if tool_name in editor_tools:
-                    buffer_count += 1
-                    if buffer_count > keep_count:
-                        # Prune this tool output
-                        msg["content"] = f"[PRUNED: Old {tool_name} output]"
+                buffer_count += 1
+                if buffer_count > keep_count:
+                    # Prune this tool output
+                    msg["content"] = f"[PRUNED: Old {tool_name} output]"

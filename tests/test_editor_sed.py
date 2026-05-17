@@ -6,7 +6,7 @@ import tool.editor.sed as tool_sed
 class TestSed(TestBase):
     def setUp(self):
         super().setUp()
-        self.tool = tool_sed.EditorToolSed()
+        self.tool = tool_sed.EditorToolSedEdit()
         self.tool.debug_assumed_decision = "<CONFIRMATION>\nAPPLY\n</CONFIRMATION>"
         self.init_editor_llm()
 

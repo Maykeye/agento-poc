@@ -5,7 +5,7 @@ from tool.editor.read import EditorToolRead
 from tool.editor.write import EditorToolWriteNewContent
 from tool.editor.finish import EditorToolFinishEditing
 from tool.editor.edit_file import EditorToolEditFile
-from tool.editor.sed import EditorToolSed
+from tool.editor.sed import EditorToolSedEdit, EditorToolSedQuery
 
 # MUST BE LAST
 if True:
@@ -20,6 +20,7 @@ __all__ = [
     "EditorToolInsertBefore",
     "EditorToolRead",
     "EditorToolSearchReplace",
-    "EditorToolSed",
+    "EditorToolSedEdit",
+    "EditorToolSedQuery",
     "EditorToolWriteNewContent",
 ]
