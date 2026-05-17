@@ -20,6 +20,7 @@ class ToolFork(Tool):
 
     def __init__(self, first_only=False):
         self.first_only = first_only
+        self.head_history = 5
         super().__init__(
             "fork",
             """
@@ -65,14 +66,10 @@ Note. If you are a subagent, don't fork your task.
             ):
                 fork_messages.pop()
 
-            if len(fork_messages) > history:
-                fork_messages = fork_messages[0:1] + fork_messages[-(history):]
-                # Strip tool calls
-                while len(fork_messages) > 1:
-                    if fork_messages[1].get("role") == "tool":
-                        del fork_messages[1]
-                        continue
-                    break
+            if len(fork_messages) > history + self.head_history:
+                fork_messages = (
+                    fork_messages[0 : self.head_history] + fork_messages[-(history):]
+                )
 
             fork_start = len(fork_messages) + 1
 
