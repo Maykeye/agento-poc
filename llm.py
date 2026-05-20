@@ -6,7 +6,8 @@ import sys
 import traceback
 from dataclasses import dataclass, field
 from typing import Optional
-
+from tool import ToolCall
+from llm_fix import llm_fix_message, llm_model_id
 import utilsql
 from utils import name_tag, TEMP_DIR
 from tool import Tool
@@ -41,23 +42,6 @@ def postprocess_tool_result(value, indent: int):
             print(f">>> Error during notification read/unlink: {e}")
 
     return value
-
-
-@dataclass
-class ToolCall:
-    function: str
-    arguments: str
-    id: str
-
-    def llm_func_call_info(self):
-        return {
-            "id": self.id,
-            "type": "function",
-            "function": {
-                "name": self.function,
-                "arguments": self.arguments,
-            },
-        }
 
 
 @dataclass
@@ -99,6 +83,7 @@ class LLM:
         self.tool_calls_id = []
         self.llm_id = utilsql.llm_id()
         self.last_tool_call_num: Optional[int] = None
+        self.model_id = llm_model_id(self.url)
 
     def clone(self):
         # TODO: copy or not callback?
@@ -194,6 +179,7 @@ class LLM:
                 break
             if finish_reason == "tool_calls":
                 break
+
             data = data["delta"]
             assert finish_reason is None, f"unexpected {finish_reason=}"
             if self.callback:
@@ -232,6 +218,9 @@ class LLM:
                 file=sys.stderr,
             )
 
+        # Qwen can fail tool call and insert it into context/reasoning_content
+        res = llm_fix_message(res, self.model_id, self.tools)
+
         msg = self.msg_assistant(res.content, res.reasoning_content)
         if res.tool_calls:
             msg["tool_calls"] = []
@@ -239,6 +228,9 @@ class LLM:
                 msg["tool_calls"].append(tool.llm_func_call_info())
         messages.append(msg)
         payload_msgs.append(copy.deepcopy(messages[-1]))
+        if res.tool_calls:
+            # llm_fix_message may have fixed the message
+            finish_reason = "tool_calls"
 
         if finish_reason == "tool_calls":
             for call in res.tool_calls:

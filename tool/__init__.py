@@ -34,6 +34,23 @@ class Tool:
         return None
 
 
+@dataclass
+class ToolCall:
+    function: str
+    arguments: str
+    id: str
+
+    def llm_func_call_info(self):
+        return {
+            "id": self.id,
+            "type": "function",
+            "function": {
+                "name": self.function,
+                "arguments": self.arguments,
+            },
+        }
+
+
 def parse_tool_parms(tool_fn: Callable):
     def _parse_type(raw_type) -> dict:
         origin = typing.get_origin(raw_type)
