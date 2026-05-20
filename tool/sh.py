@@ -91,13 +91,21 @@ class ToolCargoTest(Tool):
     def __init__(self):
         super().__init__(
             "cargo_test",
-            "Execute `cargo nextest run (args)` with additionals provided args to run tests using `nextest`.",
+            "Execute `cargo nextest run (args)` with additionals provided args to run tests using `nextest`. Trims output in both stderr/stdout to `n` last line(recommended 5 at first to see if error occurs at all)",
         )
 
     def __call__(
-        self, args: Annotated[list, "arguments that go after `cargo nextest run`"]
+        self,
+        args: Annotated[list, "arguments that go after `cargo nextest run`"],
+        n: Annotated[int, "Number of lines(from end) to keep"],
     ):
-        return run_cargo("nextest", ["run"] + args)
+        out = run_cargo("nextest", ["run"] + args)
+        for channel in ["stdout", "stderr"]:
+            if channel in out and n > 0:
+                lines = out[channel].splitlines()
+                lines = lines[-n:]
+                out[channel] = "\n".join(lines)
+        return out
 
 
 class ToolPythonUnittest(Tool):
