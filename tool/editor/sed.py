@@ -118,27 +118,27 @@ class EditorToolSedEdit(Tool):
             fork_messages = copy.deepcopy(original_messages)
 
             intro = llm.msg_user(f"""[SYSTEM OVERRIDE: SED CONFIRMATION]
-    You will be given a result of applying sed in form of diff in a message below.
-    Decide if result should be saved. If diffs looks like appropriate changes that need to be saved to the file,
-    your response should include
+You will be given a result of applying sed in form of diff in a message below.
+Decide if result should be saved. If diffs looks like appropriate changes that need to be saved to the file,
+your response should include
 
-    <CONFIRMATION>
-    APPLY
-    ... (your brief reasoning) ...
-    </CONFIRMATION>
+<CONFIRMATION>
+APPLY
+... (your brief reasoning) ...
+</CONFIRMATION>
 
-    If script changed too something wrong or there were not intention to save, respond
-    <CONFIRMATION>
-    DISCARD
-    ... (your brief reasoning) ...
-    </CONFIRMATION>
+If script changed too something wrong or there were not intention to save, respond
+<CONFIRMATION>
+DISCARD
+... (your brief reasoning) ...
+</CONFIRMATION>
 
-    Your response should contain exactly one CONFIRMATION tag. If there is no CONFIRMATION tag with ACCEPT as its first line, changes will be discarded.
+Your response should contain exactly one CONFIRMATION tag. If there is no CONFIRMATION tag with ACCEPT as its first line, changes will be discarded.
 
-    Now, here is `diff -u` between original file and result of sed
-    <DIFF>
-    {diff}
-    </DIFF>
+Now, here is `diff -u` between original file and result of sed
+<DIFF>
+{diff}
+</DIFF>
         """.strip())
             fork_messages.append(intro)
             r = llm.generate(fork_messages)
