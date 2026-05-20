@@ -13,6 +13,16 @@ from tool import Tool
 from context import context_handler
 
 
+def purge(messages: list[dict]) -> list[dict]:
+    """Removes reasoning_content"""
+    N = 15
+    messages = copy.deepcopy(messages)
+    for message in messages[:-N]:
+        if "reasoning_content" in message:
+            message["reasoning_content"] = "..."
+    return messages
+
+
 def postprocess_tool_result(value, indent: int):
     if isinstance(value, (list, dict)):
         value = json.dumps(value, ensure_ascii=False, indent=indent)
@@ -142,16 +152,17 @@ class LLM:
             json.dumps(tool.llm_func_tool_info()) for tool in self.tools.values()
         )
         prompt = message_str + tools_str
-        return f"%% PSEUDO-TOKENS: {int(len(prompt)//4)}"
+        return f"%% PSEUDO-TOKENS: {int(len(prompt)//4)}; MSGS: {len(messages)}"
 
     def _generate(self, messages: list[dict]) -> Response:
         """Generate response. If tools to be called, will recurisvely call itself and return last response. If calling tools is not desired, create new LLM instance with empty tools"""
 
         print(self.estimate_pseudo_tokens(messages))
         context_handler().prepare_current_llm(self)
+        payload_msgs = purge(messages)
 
         payload = {
-            "messages": messages,
+            "messages": payload_msgs,
             "stream": True,
         }
 
@@ -227,6 +238,7 @@ class LLM:
             for tool in res.tool_calls:
                 msg["tool_calls"].append(tool.llm_func_call_info())
         messages.append(msg)
+        payload_msgs.append(copy.deepcopy(messages[-1]))
 
         if finish_reason == "tool_calls":
             for call in res.tool_calls:
@@ -237,7 +249,7 @@ class LLM:
 
                 # Log generation before calling tool to get history_id
                 self.last_tool_call_num = utilsql.log_generation(
-                    utilsql.prompt_id(), self.llm_id, messages
+                    utilsql.prompt_id(), self.llm_id, payload_msgs
                 )
 
                 try:
@@ -282,12 +294,13 @@ class LLM:
                         "content": result,
                     }
                 )
+                payload_msgs.append(copy.deepcopy(messages[-1]))
 
             return self._generate(messages)
 
         # Log normal messages
         self.last_tool_call_num = utilsql.log_generation(
-            utilsql.prompt_id(), self.llm_id, messages
+            utilsql.prompt_id(), self.llm_id, payload_msgs
         )
 
         return res
