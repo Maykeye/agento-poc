@@ -17,9 +17,12 @@ import re
 RE_WS = re.compile(r"\s", re.MULTILINE)
 
 
-def purge(messages: list[dict]) -> list[dict]:
+def purge(messages: list[dict], _info=[]) -> list[dict]:
     """Removes reasoning_content"""
-    N = 15
+    N = int(os.getenv("AGENTO_PURGE_N", "15"))
+    if not _info:
+        print(f"%% Purging after: {N} messages")
+        _info.append(1)
     L = 250
     messages = copy.deepcopy(messages)
     for message in messages[:-N]:
