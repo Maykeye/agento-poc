@@ -12,15 +12,22 @@ import utilsql
 from utils import name_tag, TEMP_DIR
 from tool import Tool
 from context import context_handler
+import re
+
+RE_WS = re.compile(r"\s", re.MULTILINE)
 
 
 def purge(messages: list[dict]) -> list[dict]:
     """Removes reasoning_content"""
     N = 15
+    L = 250
     messages = copy.deepcopy(messages)
     for message in messages[:-N]:
-        if "reasoning_content" in message:
-            message["reasoning_content"] = "..."
+        if not (content := message.get("reasoning_content")) or len(content) <= L:
+            continue
+        message["reasoning_content"], tail = content[:L], content[L:]
+        if found := RE_WS.search(tail):
+            message["reasoning_content"] += tail[: found.start()] + "..."
     return messages
 
 
