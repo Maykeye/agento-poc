@@ -146,22 +146,3 @@ def log_prompt(project: str, prompt: str):
             "INSERT INTO prompt(id, project, log, created_at) VALUES(?,?,?,?)",
             (prompt_id(), project, prompt, now),
         )
-
-
-def log_patch_fail(history_id: int, orig: str, patch: str) -> int:
-    """Log a failed patch attempt.
-
-    Args:
-        history_id: The generation_history num (from the tool call)
-        orig: Original file content
-        patch: The patch that failed
-
-    Returns:
-        The history_id that was logged
-    """
-    with sql_db() as sql:
-        sql.execute(
-            "INSERT INTO patch_fail(history_id, orig, patch) VALUES(?,?,?)",
-            (history_id, orig, patch),
-        )
-    return history_id
