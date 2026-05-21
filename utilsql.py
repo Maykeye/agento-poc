@@ -107,9 +107,11 @@ def llm_id() -> int:
     """
     now = datetime.datetime.now(datetime.UTC).isoformat()
     with sql_db() as sql:
-        sql.execute("INSERT INTO sessions(created_at) VALUES(?)", (now,))
-        result = sql.execute("SELECT last_insert_rowid()").fetchone()
-    return result[0]
+        c = sql.execute(
+            "INSERT INTO sessions(created_at) VALUES(?) RETURNING id", (now,)
+        )
+        [result] = c.fetchone()
+        return result
 
 
 def log_generation(prompt_id: int, llm_id: int, messages: list[dict]) -> int:
@@ -127,12 +129,12 @@ def log_generation(prompt_id: int, llm_id: int, messages: list[dict]) -> int:
     messages_json = json.dumps(messages, ensure_ascii=False)
 
     with sql_db() as sql:
-        sql.execute(
-            "INSERT INTO generation_history(prompt_id, llm_id, messages, created_at) VALUES(?,?,?,?)",
+        c = sql.execute(
+            "INSERT INTO generation_history(prompt_id, llm_id, messages, created_at) VALUES(?,?,?,?) RETURNING num",
             (prompt_id, llm_id, messages_json, now),
         )
-        result = sql.execute("SELECT last_insert_rowid()").fetchone()
-    return result[0]
+        [result] = c.fetchone()
+        return result
 
 
 def log_prompt(project: str, prompt: str):
