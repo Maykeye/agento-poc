@@ -5,9 +5,15 @@ from typing import Iterable, Optional
 from pathlib import Path
 
 from config import CONFIG
+import time
 
 TEMP_DIR = Path(os.getenv("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}") + "/.agento")
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def delta_time_str(_cache: list = [time.perf_counter()]):
+    elapsed = (time.perf_counter() - _cache[0]) / 60.0
+    return f"{elapsed:.02f}m"
 
 
 def expand_file(prompt_file: str, used_files: Optional[set[str]] = None, done=False):
