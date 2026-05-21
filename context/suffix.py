@@ -79,8 +79,6 @@ class SuffixHandler(ContextHandler):
             assert edit_chunk
             replace_from, replace_with = edit_chunk
             return f"{pfx} ID: {new_id} OPERATION: {oper} CTX-IO-FILE: {path}\n{pfx} OK: edit {path} (replaced `{repr(replace_from)}` with `{repr(replace_with)}`)\n{pfx} === CONTENT START ===\n{text}\n{pfx} === CONTENT END ==="
-        elif oper == "edit_diff_patch":
-            return f"{pfx} ID: {new_id} OPERATION: {oper} CTX-IO-FILE: {path}\n{pfx} OK: {oper} {path}\n{pfx} PATCH APPLIED\n{pfx} === CONTENT START ===\n{text}\n{pfx} === CONTENT END ==="
         elif oper == "file_add_fold":
             assert edit_chunk
             fold_name, _ = edit_chunk
@@ -225,7 +223,6 @@ class SuffixHandler(ContextHandler):
             "edit_file",
             "write_file",
             "delete_file",
-            "edit_diff_patch",
             "file_add_fold",
             "file_unfold",
         }
