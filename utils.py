@@ -96,12 +96,6 @@ def extract_tag(text: str, tag: str, strip=True) -> str:
     return text.strip() if strip else text
 
 
-def name_tag(id, _cache={}):
-    if id not in _cache:
-        _cache[id] = f"q{len(_cache)+1:x}"
-    return _cache[id]
-
-
 def debug_print(*args, **kwargs):
     """Debug print function. Passes all args to print.
     Can be easily disabled later by replacing with a no-op function."""

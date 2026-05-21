@@ -10,7 +10,7 @@ from tool import ToolCall
 from llm_fix import llm_fix_message, llm_model_id
 import utils
 import utilsql
-from utils import name_tag, TEMP_DIR
+from utils import TEMP_DIR
 from tool import Tool
 from context import context_handler
 import re
@@ -341,7 +341,7 @@ class LLM:
         return out
 
     def name_tag(self):
-        return "".join([name_tag(id(x.llm)) for x in LLM.INSTANCES])
+        return "".join([f"q{x.llm.llm_id}" for x in LLM.INSTANCES])
 
     def messages(self):
         assert self.INSTANCES
