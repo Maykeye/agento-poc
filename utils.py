@@ -102,6 +102,13 @@ def debug_print(*args, **kwargs):
     print(*args, **kwargs)
 
 
+def error(*args, **kwargs):
+    BR_RED = "\x1b[91m"
+    RESET = "\x1b[0m"
+    print(BR_RED, end="")
+    print(*args, **kwargs, end=f"{RESET}\n")
+
+
 def format_duration(seconds: float) -> str:
     minutes, seconds = divmod(int(seconds), 60)
     if minutes:

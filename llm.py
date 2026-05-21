@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 from tool import ToolCall
 from llm_fix import llm_fix_message, llm_model_id
+import utils
 import utilsql
 from utils import name_tag, TEMP_DIR
 from tool import Tool
@@ -244,6 +245,10 @@ class LLM:
 
         if finish_reason == "tool_calls":
             for call in res.tool_calls:
+                if call.function not in self.tools:
+                    utils.error(
+                        f"LLM {self.llm_id} to call `{call.function}` (type:{type(call.function)}), tool list: {self.tools.keys()}"
+                    )
                 tool_callback = self.tools[call.function]
                 pfx = f">>>{self.name_tag()} {LLMVerbose.TOOL_CALL}FUNC:{LLMVerbose.RESET}"
                 print(f">>>{pfx} {call.function[:32]} ARGS: `{call.arguments[:200]}`")

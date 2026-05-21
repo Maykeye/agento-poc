@@ -5,11 +5,10 @@ import random
 from tool import Tool, ToolCall
 import typing
 
+import utils
+
 if typing.TYPE_CHECKING:
     import llm
-
-BR_RED = "\x1b[91m"
-RESET = "\x1b[0m"
 
 
 def llm_model_id(chat_url: str):
@@ -110,7 +109,7 @@ def llm_fix_qwen(response, model_id: str, tools: dict[str, Tool] = {}):
             )
         if tool_calls:
             tc = [tool.function for tool in tool_calls]
-            print(f"{BR_RED}WARNING: Tool calls was fixed and appended: {tc}{RESET}")
+            utils.error(f"Tool calls was fixed and appended: {tc}")
             old_tool_calls = response.tool_calls or []
             response.tool_calls = old_tool_calls + tool_calls[::-1]
 
