@@ -95,10 +95,18 @@ class LLM:
         self.llm_id = utilsql.llm_id()
         self.last_tool_call_num: Optional[int] = None
         self.model_id = llm_model_id(self.url)
+        self._logged_tools_info = False
+
+    def log_tools_info(self):
+        if self._logged_tools_info:
+            return
+        # TODO: log tools if they are different from last time?
+        self._logged_tools_info = True
 
     def clone(self):
-        # TODO: copy or not callback?
+        # TODO: copy or not callback? Now we assign
         llm = copy.deepcopy(self)
+        llm._logged_tools_info = False
         llm.callback = self.callback
         llm.llm_id = utilsql.llm_id()
         return llm
@@ -125,6 +133,7 @@ class LLM:
     # TODO: split class to test/mock it easier
     # TODO: split callbacks better so all these extra stuff of functions/Response are separate
     def generate(self, messages: list[dict]) -> Response:
+        self.log_tools_info()
         if messages[0]["role"] != "system":
             raise ValueError("Call messages = llm.prepend_system_message(messages)")
         try:

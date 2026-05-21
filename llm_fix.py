@@ -31,7 +31,7 @@ def rand_id(n=29):
     return "fix" + "".join([random.choice(alpha) for _ in range(n)])
 
 
-def llm_fix_qwen(response, model_id: str, tools: dict[str, Tool] = {}):
+def llm_fix_qwen(response, model_id: str, tools: dict[str, Tool]):
     import llm
 
     assert isinstance(response, llm.Response)
@@ -68,7 +68,9 @@ def llm_fix_qwen(response, model_id: str, tools: dict[str, Tool] = {}):
             # Get function name
             tool_call = tool_call.removeprefix("<tool_call>\n<function=")
             if (i := tool_call.find(">\n")) <= 0:
-                break
+                if "\n" in tool_call:  # Something went wrong
+                    break
+                i = tool_call.rfind(">")  # no args expected
             func_name, tool_call = tool_call[:i], tool_call[i + 1 :]
             parms = {}
             raw_parms = tool_call.split("\n<parameter=")
@@ -120,9 +122,7 @@ def llm_fix_qwen(response, model_id: str, tools: dict[str, Tool] = {}):
     return response
 
 
-def llm_fix_message(
-    response: "llm.Response", model_id: str, tools: dict = {}
-) -> "llm.Response":
+def llm_fix_message(response: "llm.Response", model_id: str, tools) -> "llm.Response":
     fixer = KNOWN_PATIENTS.get(model_id, lambda message, *_: message)
     fixer(response, model_id, tools)
     return response
