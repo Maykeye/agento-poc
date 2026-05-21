@@ -56,7 +56,6 @@ def _create_all_tables(db: sqlite3.Connection):
         "prompt_id INTEGER NOT NULL, "
         "llm_id INTEGER NOT NULL, "
         "num INTEGER PRIMARY KEY AUTOINCREMENT, "
-        "messages TEXT NOT NULL, "
         "created_at TEXT NOT NULL)"
     )
     db.execute(
@@ -66,11 +65,26 @@ def _create_all_tables(db: sqlite3.Connection):
         "CREATE INDEX IF NOT EXISTS gen_hist_prompt_idx ON generation_history(prompt_id)"
     )
 
+    # generation_message stores unique message texts
     db.execute(
-        "CREATE TABLE IF NOT EXISTS patch_fail("
-        "history_id INTEGER NOT NULL, "
-        "orig TEXT NOT NULL, "
-        "patch TEXT NOT NULL)"
+        "CREATE TABLE IF NOT EXISTS generation_message("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "text TEXT UNIQUE NOT NULL)"
+    )
+
+    # generation_context links generation_history to messages
+    db.execute(
+        "CREATE TABLE IF NOT EXISTS generation_context("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "llm_num_id INTEGER NOT NULL, "
+        "message_id INTEGER NOT NULL)"
+    )
+    # Indexes for efficient joins
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS gen_ctx_llm_num_idx ON generation_context(llm_num_id)"
+    )
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS gen_ctx_msg_idx ON generation_context(message_id)"
     )
 
 
@@ -126,15 +140,31 @@ def log_generation(prompt_id: int, llm_id: int, messages: list[dict]) -> int:
         The num (history_id) of the logged generation
     """
     now = datetime.datetime.now(datetime.UTC).isoformat()
-    messages_json = json.dumps(messages, ensure_ascii=False)
 
     with sql_db() as sql:
+        # Insert into generation_history without messages
         c = sql.execute(
-            "INSERT INTO generation_history(prompt_id, llm_id, messages, created_at) VALUES(?,?,?,?) RETURNING num",
-            (prompt_id, llm_id, messages_json, now),
+            "INSERT INTO generation_history(prompt_id, llm_id, created_at) VALUES(?,?,?) RETURNING num",
+            (prompt_id, llm_id, now),
         )
-        [result] = c.fetchone()
-        return result
+        [llm_num_id] = c.fetchone()
+
+        # Store each message in generation_message (skip if exists) and link in generation_context
+        for msg in messages:
+            msg_json = json.dumps(msg, ensure_ascii=False, sort_keys=True)
+            # Try to insert; ignore if already exists (unique index on text)
+            c = sql.execute(
+                "INSERT INTO generation_message(text) VALUES(?) ON CONFLICT(text) DO UPDATE SET text=text RETURNING id",
+                (msg_json,),
+            )
+            [msg_id] = c.fetchone()
+            # Link the message to this generation
+            sql.execute(
+                "INSERT INTO generation_context(llm_num_id, message_id) VALUES(?,?)",
+                (llm_num_id, msg_id),
+            )
+
+        return llm_num_id
 
 
 def log_prompt(project: str, prompt: str):
