@@ -6,12 +6,11 @@ import sys
 import traceback
 from dataclasses import dataclass, field
 from typing import Optional
-from tool import ToolCall
+from tool import Tool, ToolCall
 from llm_fix import llm_fix_message, llm_model_id
 import utils
 import utilsql
 from utils import TEMP_DIR
-from tool import Tool
 from context import context_handler
 import re
 
@@ -258,6 +257,14 @@ class LLM:
                     utils.error(
                         f"LLM {self.llm_id} to call `{call.function}` (type:{type(call.function)}), tool list: {self.tools.keys()}"
                     )
+                    utilsql.log_tool_error(
+                        llm_id=self.llm_id,
+                        reason="non-existing function",
+                        name_tag=self.name_tag(),
+                        tool_list=str(list(self.tools.keys())),
+                        function_name=call.function,
+                        function_args=call.arguments,
+                    )
                 tool_callback = self.tools[call.function]
                 pfx = f">>>{self.name_tag()} {LLMVerbose.TOOL_CALL}FUNC:{LLMVerbose.RESET}"
                 print(f">>>{pfx} {call.function[:32]} ARGS: `{call.arguments[:200]}`")
@@ -272,7 +279,17 @@ class LLM:
                     args = json.loads(call.arguments)
                     result = tool_callback(**args)  # type: ignore
                 except Exception as ex:
+                    tb = traceback.format_exc()
                     traceback.print_exc()
+                    utilsql.log_tool_error(
+                        llm_id=self.llm_id,
+                        reason="execution error",
+                        name_tag=self.name_tag(),
+                        tool_list=str(list(self.tools.keys())),
+                        function_name=call.function,
+                        function_args=call.arguments,
+                        exception_traceback=tb,
+                    )
                     result = json.dumps({"TOOL CALL ERROR": str(ex)})
                 if self.tool_calls_id[-1:] == [call.id]:
                     self.tool_calls_id.pop()

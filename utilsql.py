@@ -93,6 +93,22 @@ def _create_all_tables(db: sqlite3.Connection):
         "id INTEGER PRIMARY KEY AUTOINCREMENT, "
         "text TEXT UNIQUE NOT NULL)"
     )
+    # tool_error logs errors that occur during tool calling
+    db.execute(
+        "CREATE TABLE IF NOT EXISTS tool_error("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "llm_id INTEGER NOT NULL, "
+        "reason TEXT NOT NULL, "
+        "name_tag TEXT NOT NULL, "
+        "tool_list TEXT NOT NULL, "
+        "function_name TEXT, "
+        "function_args TEXT, "
+        "exception_traceback TEXT, "
+        "created_at TEXT NOT NULL)"
+    )
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS tool_error_llm_idx ON tool_error(llm_id)"
+    )
 
 
 def prompt_id() -> int:
@@ -213,3 +229,54 @@ def log_prompt(project: str, prompt: str):
             "INSERT INTO prompt(id, project, log, created_at) VALUES(?,?,?,?)",
             (prompt_id(), project, prompt, now),
         )
+
+
+def log_tool_error(
+    llm_id: int,
+    reason: str,
+    name_tag: str,
+    tool_list: str,
+    function_name: str = None,
+    function_args: str = None,
+    exception_traceback: str = None,
+) -> int:
+    """Log a tool error that occurred during tool calling.
+
+    Args:
+        llm_id: The LLM instance ID
+        reason: Reason for the error (e.g., "non-existing function", "execution error")
+        name_tag: The LLM's name_tag
+        tool_list: String representation of available tools
+        function_name: Name of the function that was attempted (optional)
+        function_args: Arguments passed to the function (optional)
+        exception_traceback: Traceback of the exception (optional)
+
+    Returns:
+        The id of the inserted row
+    """
+    import traceback
+
+    if exception_traceback is None:
+        exception_traceback = "".join(traceback.format_stack())
+
+    created_at = datetime.datetime.now(datetime.UTC).isoformat()
+
+    conn = sql_db()
+    cursor = conn.execute(
+        "INSERT INTO tool_error "
+        "(llm_id, reason, name_tag, tool_list, function_name, function_args, "
+        "exception_traceback, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            llm_id,
+            reason,
+            name_tag,
+            tool_list,
+            function_name,
+            function_args,
+            exception_traceback,
+            created_at,
+        ),
+    )
+    conn.commit()
+    return cursor.lastrowid

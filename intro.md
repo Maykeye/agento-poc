@@ -68,6 +68,8 @@ To run tests use pass to unittest `discover -s tests`
 
 #### Sed tests
 - tests/test_sed.py
+#### SQL tests
+- tests/test_tool_error.py
 </FILES_INFO>
 
 - For editing and or fixing files please use edit_file
