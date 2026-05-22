@@ -55,6 +55,7 @@ def _create_all_tables(db: sqlite3.Connection):
         "CREATE TABLE IF NOT EXISTS generation_history("
         "prompt_id INTEGER NOT NULL, "
         "llm_id INTEGER NOT NULL, "
+        "tools_id INTEGER, "
         "num INTEGER PRIMARY KEY AUTOINCREMENT, "
         "created_at TEXT NOT NULL)"
     )
@@ -85,6 +86,12 @@ def _create_all_tables(db: sqlite3.Connection):
     )
     db.execute(
         "CREATE INDEX IF NOT EXISTS gen_ctx_msg_idx ON generation_context(message_id)"
+    )
+    # llm_tools stores unique tool info texts (normalized like generation_message)
+    db.execute(
+        "CREATE TABLE IF NOT EXISTS llm_tools("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "text TEXT UNIQUE NOT NULL)"
     )
 
 
@@ -128,13 +135,40 @@ def llm_id() -> int:
         return result
 
 
-def log_generation(prompt_id: int, llm_id: int, messages: list[dict]) -> int:
+def log_tools(db: sqlite3.Connection, tools: dict) -> int:
+    """Log tools info and return the tools_id.
+
+    Uses normalized llm_tools table to store unique tool info texts,
+    so duplicate tool configurations share the same text record.
+
+    Returns:
+        The id of the tools record in llm_tools table
+    """
+    # Build json of tool keys
+    tool_list = list(x for x in sorted(tools.keys()))
+    tool_info = json.dumps(tool_list, ensure_ascii=False, sort_keys=True)
+
+    # Try to insert tool_info text; ignore if already exists (unique index)
+    c = db.execute(
+        "INSERT INTO llm_tools(text) VALUES(?) "
+        "ON CONFLICT(text) DO UPDATE SET text=text RETURNING id",
+        (tool_info,),
+    )
+    [tool_id] = c.fetchone()
+
+    return tool_id
+
+
+def log_generation(
+    prompt_id: int, llm_id: int, messages: list[dict], tools: dict
+) -> int:
     """Log generation history for an LLM.
 
     Args:
         prompt_id: The prompt ID (from prompt_id())
         llm_id: The LLM instance ID (from llm_id())
         messages: List of messages to log
+        tools: Dict of available tools
 
     Returns:
         The num (history_id) of the logged generation
@@ -142,10 +176,13 @@ def log_generation(prompt_id: int, llm_id: int, messages: list[dict]) -> int:
     now = datetime.datetime.now(datetime.UTC).isoformat()
 
     with sql_db() as sql:
-        # Insert into generation_history without messages
+        # First, log tools and get tools_id
+        tools_id = log_tools(sql, tools)
+
+        # Insert into generation_history with tools_id
         c = sql.execute(
-            "INSERT INTO generation_history(prompt_id, llm_id, created_at) VALUES(?,?,?) RETURNING num",
-            (prompt_id, llm_id, now),
+            "INSERT INTO generation_history(prompt_id, llm_id, tools_id, created_at) VALUES(?,?,?,?) RETURNING num",
+            (prompt_id, llm_id, tools_id, now),
         )
         [llm_num_id] = c.fetchone()
 

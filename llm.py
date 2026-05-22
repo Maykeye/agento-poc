@@ -265,7 +265,7 @@ class LLM:
 
                 # Log generation before calling tool to get history_id
                 self.last_tool_call_num = utilsql.log_generation(
-                    utilsql.prompt_id(), self.llm_id, payload_msgs
+                    utilsql.prompt_id(), self.llm_id, payload_msgs, self.tools
                 )
 
                 try:
@@ -316,7 +316,7 @@ class LLM:
 
         # Log normal messages
         self.last_tool_call_num = utilsql.log_generation(
-            utilsql.prompt_id(), self.llm_id, payload_msgs
+            utilsql.prompt_id(), self.llm_id, payload_msgs, self.tools
         )
 
         return res
