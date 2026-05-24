@@ -5,6 +5,7 @@ from dataclasses import dataclass
 @dataclass
 class Config:
     language: str
+    forced_language: bool
     project_directory: Path
     logging_sqlite_path: Path
     read_only_files: list
@@ -20,7 +21,7 @@ class Config:
         if CONFIG.project_directory / "static" / "index.html":
             return "js"
         print(f"WARNING! NO LANGUAGE DETECTED IN {CONFIG.project_directory}")
-        return "(none)"
+        return "none"
 
     def make_file_readonly(self, path: str):
         self.read_only_files.append(real_path(path))
@@ -30,10 +31,11 @@ class Config:
 
 
 CONFIG = Config(
-    language="(none)",
+    language="none",
     project_directory=Path("<THE PROJECT_DIRECTORY IS NOT SET>"),
     logging_sqlite_path=Path("~/.local/state/agento/agento.log").expanduser(),
     read_only_files=[],
+    forced_language=False,
 )
 
 

@@ -22,13 +22,15 @@ class AgencyNode:
         self.readonly = read_only
         self.lang = lang
         CONFIG.language = self.lang
-        assert self.lang in ["rust", "py", "js", "nul", "null", "rpg"]
+        assert self.lang in ["rust", "py", "js", "none", "rpg"]
 
     def _llm_initializers(self):
+        if self.lang == "none":
+            print("(Skipped all tools)")
+            return []
         sys = []
         if self.lang == "rpg":
             sys = [self._llm_rpg]
-
         elif self.readonly:
             sys = [self._llm_reading]
         else:
@@ -84,7 +86,7 @@ class AgencyNode:
             llm.add_tool(tool.sh.ToolCargoCheck())
             llm.add_tool(tool.sh.ToolCargoClippy())
             llm.add_tool(tool.sh.ToolCargoTest())
-            llm.add_tool(tool.sh.ToolRustApiInfo())
+            # llm.add_tool(tool.sh.ToolRustApiInfo()) # disabled as I no longer use it in pdoman
         if self.lang == "py":
             llm.add_tool(tool.sh.ToolPythonUnittest())
         if self.lang == "js":
@@ -118,15 +120,14 @@ def main():
     # TODO: use it in prompt.md as @readonly file?
 
     # read prompt
+    CONFIG.language = CONFIG.guess_project_language()
     prompt = expand_file(filename)
     assert CONFIG.project_directory.is_dir(), "set @project_dir in prompt"
 
     log_prompt(str(CONFIG.project_directory), prompt)
 
     # run
-    lang = CONFIG.guess_project_language()
-    print(f"{lang=}")
-    node = AgencyNode(lang=lang)
+    node = AgencyNode(lang=CONFIG.language)
     node.simple(prompt)
     if node.lang == "rust":
         tool.sh.rustfmt()

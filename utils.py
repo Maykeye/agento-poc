@@ -39,6 +39,11 @@ def expand_file(prompt_file: str, used_files: Optional[set[str]] = None, done=Fa
             done = True
         elif cmd(line, "@eof") is not None:
             break
+        elif lang := cmd(line, "@lang "):
+            lang = lang.strip()
+            print(f"Forced langauge: {lang}")
+            CONFIG.forced_language = True
+            CONFIG.language = lang
         elif include := cmd(line, "@read "):
             out = expand_file(include, used_files, done)
             new += [out]
