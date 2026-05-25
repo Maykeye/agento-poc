@@ -45,6 +45,16 @@ class ToolEcho(Tool):
 
 
 @dataclass
+class ToolPing(Tool):
+    def __init__(self):
+        super().__init__("ping", "(debug) print string")
+
+    def __call__(self):
+        print("DEBUG STRING PINGED")
+        return f"String pinged"
+
+
+@dataclass
 class ToolCall:
     function: str
     arguments: str
