@@ -112,7 +112,7 @@ class LLM:
 
     def add_tool(self, tool: Tool):
         """Add tools, description is taken from docstring, description  and type of arguments is taken from their type info(Annotated[raw, description])"""
-        assert tool.name not in self.tools
+        assert tool.name not in self.tools, f"tool {tool.name} must be unique"
         self.tools[tool.name] = tool
 
     def prepend_system_message(self, msgs: list[dict]):

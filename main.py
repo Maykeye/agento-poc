@@ -50,8 +50,9 @@ class AgencyNode:
         for initializer in self._llm_initializers():
             initializer(llm)
         if os.getenv("LLAMA_AGENTO_VERBOSE"):
-            llm.add_tool(tool.ToolEcho())
-            llm.add_tool(tool.ToolPing())
+            llm.add_tool(tool.ToolDebugPing())
+            llm.add_tool(tool.ToolDebugEcho())
+            llm.add_tool(tool.ToolDebugAdd())
         return llm
 
     def _llm_rpg(self, llm: LLM):

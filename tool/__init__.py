@@ -35,7 +35,7 @@ class Tool:
 
 
 @dataclass
-class ToolEcho(Tool):
+class ToolDebugEcho(Tool):
     def __init__(self):
         super().__init__("echo", "(debug) print string")
 
@@ -45,13 +45,23 @@ class ToolEcho(Tool):
 
 
 @dataclass
-class ToolPing(Tool):
+class ToolDebugPing(Tool):
     def __init__(self):
         super().__init__("ping", "(debug) print string")
 
     def __call__(self):
         print("DEBUG STRING PINGED")
         return f"String pinged"
+
+
+@dataclass
+class ToolDebugAdd(Tool):
+    def __init__(self):
+        super().__init__("add", "(debug) concat lhs/rhs")
+
+    def __call__(self, lhs: Annotated[int, "lhs"], rhs: Annotated[int, "rhs"]):
+        print(f"DEBUG ADD {lhs} to {rhs} (type {type(lhs)}, {type(rhs)})={lhs+rhs}")
+        return f"String concatted: {lhs+rhs}"
 
 
 @dataclass
