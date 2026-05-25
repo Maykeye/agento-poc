@@ -200,6 +200,8 @@ class LLM:
                 break
 
             data = data["delta"]
+            if os.getenv("LLAMA_AGENTO_VERBOSE"):
+                print("%%%", data, file=sys.stderr)
             assert finish_reason is None, f"unexpected {finish_reason=}"
             if self.callback:
                 self.callback(data)
