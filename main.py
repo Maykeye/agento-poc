@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import os
 import time
 from pathlib import Path
 from typing import Optional
@@ -48,6 +49,8 @@ class AgencyNode:
         llm = LLM()
         for initializer in self._llm_initializers():
             initializer(llm)
+        if os.getenv("LLAMA_AGENTO_VERBOSE"):
+            llm.add_tool(tool.ToolEcho())
         return llm
 
     def _llm_rpg(self, llm: LLM):

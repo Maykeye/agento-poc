@@ -35,6 +35,16 @@ class Tool:
 
 
 @dataclass
+class ToolEcho(Tool):
+    def __init__(self):
+        super().__init__("echo", "(debug) print string")
+
+    def __call__(self, string: Annotated[str, "String to print to screen"]):
+        print("DEBUG STRING ECHOED", string)
+        return f"String {string} printed"
+
+
+@dataclass
 class ToolCall:
     function: str
     arguments: str
