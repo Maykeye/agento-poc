@@ -116,7 +116,6 @@ def main():
     # Parse initial prompt file
     assert len(sys.argv) == 2
     filename = sys.argv[1]
-    assert Path(filename).resolve().is_file()
 
     # Example of preventing editing DESIGN.md
     # CONFIG.make_file_readonly("DESIGN.md")
