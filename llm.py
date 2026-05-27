@@ -7,7 +7,7 @@ import traceback
 from dataclasses import dataclass, field
 from typing import Optional
 from tool import Tool, ToolCall
-from llm_fix import llm_fix_message, llm_model_id
+from llm_fix import llm_fix_message, llm_model_id, coerce_arg_types
 import utils
 import utilsql
 from utils import TEMP_DIR
@@ -279,6 +279,8 @@ class LLM:
 
                 try:
                     args = json.loads(call.arguments)
+                    # Coerce argument types to match tool's expected types
+                    args = coerce_arg_types(args, tool_callback)
                     result = tool_callback(**args)  # type: ignore
                 except Exception as ex:
                     tb = traceback.format_exc()

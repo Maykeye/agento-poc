@@ -70,6 +70,8 @@ To run tests use pass to unittest `discover -s tests`
 - tests/test_sed.py
 #### SQL tests
 - tests/test_tool_error.py
+#### Type coercion tests
+- tests/test_coerce_arg_types.py
 </FILES_INFO>
 
 - For editing and or fixing files please use edit_file

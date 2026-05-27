@@ -11,6 +11,46 @@ if typing.TYPE_CHECKING:
     import llm
 
 
+def coerce_arg_types(
+    args: dict[str, object], tool: "Tool"
+) -> dict[str, object]:
+    """Coerce argument types to match tool's expected parameter types.
+    
+    This handles cases where the LLM passes string values for parameters
+    that should be integers, numbers, booleans, or arrays.
+    
+    Args:
+        args: The parsed arguments dictionary
+        tool: The Tool instance whose parameters define expected types
+        
+    Returns:
+        A new dictionary with coerced values where possible
+    """
+    if not (expected_args := tool.parameters.get("properties")):
+        return args
+
+    coerced = dict(args)
+    for parm, value in coerced.items():
+        if not isinstance(value, str):
+            continue
+        if not (expected_arg := expected_args.get(parm)):
+            continue
+        if not (expected_type := expected_arg.get("type")):
+            continue
+
+        try:
+            if expected_type == "integer":
+                coerced[parm] = int(value)
+            elif expected_type == "number":
+                coerced[parm] = float(value)
+            elif expected_type == "boolean":
+                coerced[parm] = value.strip().lower() in ("true", "1", "yes")
+            elif expected_type == "array":
+                coerced[parm] = json.loads(value)
+        except (ValueError, json.JSONDecodeError):
+            pass  # Keep original value if coercion fails
+
+    return coerced
 def llm_model_id(chat_url: str):
     try:
         url = chat_url[: chat_url.rindex("/v1")] + "/v1/models"
@@ -85,22 +125,7 @@ def llm_fix_qwen(response, model_id: str, tools: dict[str, Tool]):
                 expected_args := tool.parameters.get("properties")
             ):
                 # recast to python if can
-                for parm, value in parms.items():
-                    try:
-                        if not (expected_arg := expected_args.get(parm)):
-                            continue
-                        if not (expected_type := expected_arg.get("type")):
-                            continue
-                        if expected_type == "integer":
-                            parms[parm] = int(value)
-                        if expected_type == "number":
-                            parms[parm] = float(value)
-                        if expected_type == "boolean":
-                            parms[parm] = value.strip().lower() in ("true", "1", "yes")
-                        if expected_type == "array":
-                            parms[parm] = json.loads(value)
-                    except:
-                        pass  # not interested
+                parms = coerce_arg_types(parms, tool)
 
             tool_calls.append(
                 ToolCall(
