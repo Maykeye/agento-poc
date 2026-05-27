@@ -1,0 +1,22 @@
+start local
+INFO:     127.0.0.1:38486 - "GET /v1/models HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38494 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Project directory: /workspace/proxy
+Forced langauge: rpg
+%% PSEUDO-TOKENS: 1917; MSGS: 2; Δ𝑡: 0.00m
+%% Purging after: 15 messages
+[33mThe user wants me to output ONLY the exact code block they provided, treating it as raw text. They explicitly say not to execute it as a tool call, just print it as raw text.
+
+Let me output exactly what they asked for.
+[37m```
+(tool_call)
+(function=add)
+(parameter=lhs)
+10
+(/parameter)
+(parameter=rhs)
+200
+(/parameter)
+(/function)
+(/tool_call)(/tool_call)```[0m
+Elapsed time: 4s

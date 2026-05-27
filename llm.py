@@ -15,6 +15,7 @@ from context import context_handler
 import re
 
 RE_WS = re.compile(r"\s", re.MULTILINE)
+GLOBAL_STEPS = int(os.getenv("LLAMA_AGENTO_DEBUG", "-1"))
 
 
 def purge(messages: list[dict], _info=[]) -> list[dict]:
@@ -158,8 +159,19 @@ class LLM:
         prompt = message_str + tools_str
         return f"%% PSEUDO-TOKENS: {int(len(prompt)//4)}; MSGS: {len(messages)}; Δ𝑡: {utils.delta_time_str()}"
 
+    def _debug_abort(self):
+        global GLOBAL_STEPS
+        if GLOBAL_STEPS < 0:
+            return
+        GLOBAL_STEPS -= 1
+        if not GLOBAL_STEPS:
+            print("%%% LLAMA_AGENTO_DEBUG reached zero")
+            exit(1)
+
     def _generate(self, messages: list[dict]) -> Response:
         """Generate response. If tools to be called, will recurisvely call itself and return last response. If calling tools is not desired, create new LLM instance with empty tools"""
+
+        self._debug_abort()
 
         print(self.estimate_pseudo_tokens(messages))
         context_handler().prepare_current_llm(self)
