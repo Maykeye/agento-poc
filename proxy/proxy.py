@@ -9,8 +9,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 import httpx
 
-TAG_START = "("
-TAG_END = ")"
+TAG_START = "<"
+TAG_END = ">"
 
 TOOL_CALL_OPEN = TAG_START + "tool_call" + TAG_END
 TOOL_CALL_CLOSE = TAG_START + "/tool_call" + TAG_END
@@ -36,8 +36,8 @@ class ContentTypeState:
     tool_id: str = ""
     partial_line: str = ""
     tc_header_emitted: bool = False  # track across tokens
-    prev_tc_closed: bool = False     # True after first (/tool_call) seen
-    tc_index: int = 0                # tool_calls array index
+    prev_tc_closed: bool = False  # True after first (/tool_call) seen
+    tc_index: int = 0  # tool_calls array index
 
 
 class _ToolCallParser:
@@ -75,8 +75,8 @@ class _ToolCallParser:
             return 0, False
 
         # Handle non-tag text before any tag (e.g. newlines between tags)
-        if buf[0] != "(":
-            next_tag = buf.find("(")
+        if buf[0] != TAG_START:
+            next_tag = buf.find(TAG_START)
             if next_tag == -1:
                 val = buf
                 consumed = len(buf)
@@ -93,7 +93,7 @@ class _ToolCallParser:
             return consumed, False
 
         # buf[0] == "(": consume tag
-        end = buf.find(")")
+        end = buf.find(TAG_END)
         if end == -1:
             return 0, False
         tag = buf[1:end]
@@ -120,16 +120,16 @@ class _ToolCallParser:
             self._in_param = True
             self._param_value_chars = []
             self._value_started = False
-            self._fragments.append(json.dumps(param_name) + ':')
+            self._fragments.append(json.dumps(param_name) + ":")
             return end + 1, False
 
         if tag == "/parameter":
             if self._in_param and self._value_started:
                 self._fragments.append('"')
             if self._in_param:
-                self._arguments[self._current_param_name] = (
-                    "".join(self._param_value_chars).strip()
-                )
+                self._arguments[self._current_param_name] = "".join(
+                    self._param_value_chars
+                ).strip()
             self._in_param = False
             self._param_value_chars = []
             self._value_started = False
@@ -168,8 +168,10 @@ class _ToolCallParser:
 # Returns (emitted_text, arg_fragments, is_finish)
 # ---------------------------------------------------------------------------
 
+
 def _process_content(
-    text: str, state: ContentTypeState,
+    text: str,
+    state: ContentTypeState,
 ) -> Tuple[str, List[str], Optional[bool]]:
     if state.mode == ContentTypeMode.TOOL_CALL_PARSING:
         return _process_tool_call_mode(text, state)
@@ -177,7 +179,8 @@ def _process_content(
 
 
 def _process_normal_mode(
-    text: str, state: ContentTypeState,
+    text: str,
+    state: ContentTypeState,
 ) -> Tuple[str, List[str], None]:
     buf = state.partial_line
     if buf:
@@ -192,9 +195,7 @@ def _process_normal_mode(
         state.partial_line = ""
         return ("", [], None)
 
-    if len(buf) <= len(TOOL_CALL_OPEN) and buf.startswith(
-        TOOL_CALL_OPEN[:len(buf)]
-    ):
+    if len(buf) <= len(TOOL_CALL_OPEN) and buf.startswith(TOOL_CALL_OPEN[: len(buf)]):
         state.partial_line = buf
         return ("", [], None)
 
@@ -203,7 +204,8 @@ def _process_normal_mode(
 
 
 def _process_tool_call_mode(
-    text: str, state: ContentTypeState,
+    text: str,
+    state: ContentTypeState,
 ) -> Tuple[str, List[str], Optional[bool]]:
     state.parser.feed(text)
     frags = state.parser.drain_fragments()
@@ -216,13 +218,12 @@ def _process_tool_call_mode(
 # SSE payload helpers
 # ---------------------------------------------------------------------------
 
+
 def _sse_payload(sse_id, sse_object, delta, finish_reason=None):
     return {
         "id": sse_id or "",
         "object": sse_object or "chat.completion.chunk",
-        "choices": [
-            {"delta": delta, "index": 0, "finish_reason": finish_reason}
-        ],
+        "choices": [{"delta": delta, "index": 0, "finish_reason": finish_reason}],
     }
 
 
@@ -232,26 +233,32 @@ def _flush_payload(sse_id, sse_object, field, value):
 
 def _tc_header_payload(sse_id, sse_object, tc_index, tool_id, name, args_frag):
     return _sse_payload(
-        sse_id, sse_object,
+        sse_id,
+        sse_object,
         {
-            "tool_calls": [{
-                "index": tc_index,
-                "id": tool_id,
-                "type": "function",
-                "function": {"name": name, "arguments": args_frag},
-            }]
+            "tool_calls": [
+                {
+                    "index": tc_index,
+                    "id": tool_id,
+                    "type": "function",
+                    "function": {"name": name, "arguments": args_frag},
+                }
+            ]
         },
     )
 
 
 def _tc_args_payload(sse_id, sse_object, tc_index, args_frag):
     return _sse_payload(
-        sse_id, sse_object,
+        sse_id,
+        sse_object,
         {
-            "tool_calls": [{
-                "index": tc_index,
-                "function": {"arguments": args_frag},
-            }]
+            "tool_calls": [
+                {
+                    "index": tc_index,
+                    "function": {"arguments": args_frag},
+                }
+            ]
         },
     )
 
@@ -263,6 +270,7 @@ def _finish_payload(sse_id, sse_object, reason="tool_calls"):
 # ---------------------------------------------------------------------------
 # Main streaming handler
 # ---------------------------------------------------------------------------
+
 
 async def _stream(url: str, body: bytes, headers: dict):
     states: dict[str, ContentTypeState] = {
@@ -321,7 +329,11 @@ async def _stream(url: str, body: bytes, headers: dict):
                         fn_name = state.parser._function_name if state.parser else ""
 
                         # Detect new function after previous function's args
-                        if state.tc_header_emitted and arg_frags and arg_frags[0] == "{":
+                        if (
+                            state.tc_header_emitted
+                            and arg_frags
+                            and arg_frags[0] == "{"
+                        ):
                             # Close previous function's arguments
                             yield f"data: {json.dumps(_tc_args_payload(
                                 sse_id, sse_object, state.tc_index, "}")  )}\n\n"
@@ -335,8 +347,12 @@ async def _stream(url: str, body: bytes, headers: dict):
                         for frag in arg_frags:
                             if not state.tc_header_emitted:
                                 p = _tc_header_payload(
-                                    sse_id, sse_object,
-                                    state.tc_index, state.tool_id, fn_name, frag,
+                                    sse_id,
+                                    sse_object,
+                                    state.tc_index,
+                                    state.tool_id,
+                                    fn_name,
+                                    frag,
                                 )
                                 state.tc_header_emitted = True
                             else:
@@ -369,6 +385,7 @@ async def _stream(url: str, body: bytes, headers: dict):
 # Proxy endpoint
 # ---------------------------------------------------------------------------
 
+
 @app.api_route(
     "/{path:path}",
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
@@ -395,6 +412,7 @@ async def proxy(request: Request, path: str):
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(
         app,
         host="0.0.0.0",

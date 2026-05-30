@@ -10,23 +10,23 @@ STRICT RULES:
 
 Print as raw text
 ```
-(tool_call)
-(function=add)
-(parameter=lhs)
+<tool_call>
+<function=add>
+<parameter=lhs>
 10
-(/parameter)
-(parameter=rhs)
+</parameter>
+<parameter=rhs>
 200
-(/parameter)
-(/function)
-(function=echo)
-(parameter=string)
+</parameter>
+</function>
+<function=echo>
+<parameter=string>
 200
-(/parameter)
-(/function)
-(function=ping)
-(/function)
-(/tool_call)
+</parameter>
+</function>
+<function=ping>
+</function>
+</tool_call>
 ```
 EOF
 }
