@@ -4,6 +4,7 @@ import secrets
 from dataclasses import dataclass
 from enum import Enum
 from typing import List, Optional, Tuple
+import logging
 
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -19,6 +20,13 @@ UPSTREAM = (
     f"{os.environ.get('LLAMA_CPP_URL', 'http://localhost')}:"
     f"{os.environ.get('LLAMA_CPP_PORT', '10000')}"
 )
+
+logging.basicConfig(
+    filename="/home/fella/.local/state/agento/proxy.log",
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
+
 app = FastAPI()
 
 _client = httpx.AsyncClient(timeout=None)
@@ -189,6 +197,7 @@ def _process_normal_mode(
         buf = text
 
     if buf == TOOL_CALL_OPEN:
+        logging.info("Leaked tool call detected")
         state.mode = ContentTypeMode.TOOL_CALL_PARSING
         state.parser = _ToolCallParser()
         state.tool_id = "call_" + secrets.token_hex(16)
