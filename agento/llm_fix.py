@@ -6,12 +6,15 @@ import random
 from agento.tool import Tool, ToolCall
 from agento import utils
 import typing
+from typing import Union
 
 if typing.TYPE_CHECKING:
     from agento import llm
 
 
-def coerce_arg_types(args: dict[str, object], tool: "Tool") -> dict[str, object]:
+def coerce_arg_types(
+    args: dict[str, Union[object, str]], tool: "Tool"
+) -> dict[str, object]:
     """Coerce argument types to match tool's expected parameter types.
 
     This handles cases where the LLM passes string values for parameters
@@ -42,7 +45,10 @@ def coerce_arg_types(args: dict[str, object], tool: "Tool") -> dict[str, object]
             elif expected_type == "number":
                 coerced[parm] = float(value)
             elif expected_type == "boolean":
-                coerced[parm] = value.strip().lower() in ("true", "1", "yes")
+                if value.strip().lower() in ("true", "1", "yes"):
+                    coerced[parm] = True
+                if value.strip().lower() in ("false", "0", "no"):
+                    coerced[parm] = False
             elif expected_type == "array":
                 coerced[parm] = json.loads(value)
         except (ValueError, json.JSONDecodeError):
