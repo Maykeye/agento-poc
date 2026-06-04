@@ -30,7 +30,8 @@ Sql utilities are stored in `utilsql.py`
 Example: `assert isinstance(result, dict)`
 Example: `self.assertEqual(result["status"], "ok")`
 
-To run tests use pass to unittest `discover -s tests`
+To run tests in general use pass to unittest `discover -s tests`
+To run particular, pass full classname to unittest, e.g. `agento.tests.test_foo.TestBar.test_bar2`
 
 ## Tests for tools
 
