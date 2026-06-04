@@ -1,5 +1,3 @@
-.planning
-.project
 __pycache__
-prompt.md
-tests/dat/
+agento/prompt.md
+agento/tests/dat/
