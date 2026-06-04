@@ -1,14 +1,14 @@
+import json
+import unittest
 from pathlib import Path
 from typing import Optional
-import unittest
 
-from context import set_context_mode
-from context.context_handler import ContextMode
-from llm import LLM, LlmInstace, FinishGeneration
-import tool.editor as tool_editor
-from tool.editor.editor import EditorEntry, ToolEditor, KEEP_OLD_BUFFERS
-from tests.test_helper import TestBase, tmpfilename
-import json
+from agento.context import set_context_mode
+from agento.context.context_handler import ContextMode
+from agento.llm import LLM, LlmInstace, FinishGeneration
+import agento.tool.editor as tool_editor
+from agento.tool.editor.editor import EditorEntry, ToolEditor, KEEP_OLD_BUFFERS
+from agento.tests.test_helper import TestBase, tmpfilename
 
 
 class TestEditorBase(TestBase):
