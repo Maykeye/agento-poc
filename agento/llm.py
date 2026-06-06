@@ -13,7 +13,7 @@ from agento import utils
 from agento import utilsql
 from agento.context import context_handler
 from agento.llm_fix import llm_fix_message, llm_model_id, coerce_arg_types
-from agento.tool import Tool, ToolCall
+from agento.tool import Tool, ToolCall, ToolDebugEcho
 from agento.utils import TEMP_DIR
 
 RE_WS = re.compile(r"\s", re.MULTILINE)
@@ -135,6 +135,11 @@ class LLM:
     # TODO: split class to test/mock it easier
     # TODO: split callbacks better so all these extra stuff of functions/Response are separate
     def generate(self, messages: list[dict]) -> Response:
+        debug_tools = False
+        if not self.tools:
+            debug_tools = True
+            self.tools["echo"] = ToolDebugEcho()
+
         self.log_tools_info()
         if messages[0]["role"] != "system":
             raise ValueError("Call messages = llm.prepend_system_message(messages)")
@@ -142,6 +147,8 @@ class LLM:
             self.INSTANCES.append(LlmInstace(self, messages))
             return self._generate(messages)
         finally:
+            if debug_tools and "echo" in self.tools:
+                del self.tools["echo"]
             if self.INSTANCES:
                 last = self.INSTANCES[-1]
                 if last.llm is self and last.messages is messages:
