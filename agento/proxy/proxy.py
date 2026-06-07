@@ -310,6 +310,14 @@ async def _stream(url: str, body: bytes, headers: dict):
                     sse_id = payload.get("id", "")
                     sse_object = payload.get("object", "chat.completion.chunk")
 
+                if (
+                    "choices" not in payload
+                    or not payload["choices"]
+                    or "delta" not in payload["choices"][0]
+                ):
+                    yield line + "\n\n"
+                    continue
+
                 delta = payload["choices"][0]["delta"]
 
                 cur_type = None
