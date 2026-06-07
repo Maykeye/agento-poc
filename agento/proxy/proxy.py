@@ -293,9 +293,13 @@ async def _stream(url: str, body: bytes, headers: dict):
 
     async with httpx.AsyncClient(timeout=None) as client:
         async with client.stream("POST", url, content=body, headers=headers) as resp:
-            resp.raise_for_status()
-
             async for line in resp.aiter_lines():
+                if resp.status_code != 200:
+                    # Read the full error body from the upstream
+                    error_content = await resp.aread()
+                    # Yield the error directly and return
+                    yield error_content.decode("utf-8")
+                    return
                 if not line:
                     continue
                 if line == "data: [DONE]":
