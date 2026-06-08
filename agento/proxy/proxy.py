@@ -8,7 +8,7 @@ from typing import List, Optional, Tuple
 import logging
 
 from fastapi import FastAPI, Request
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse, JSONResponse, Response
 import httpx
 
 TAG_START = "<"
@@ -282,7 +282,7 @@ def _finish_payload(sse_id, sse_object, reason="tool_calls"):
 # ---------------------------------------------------------------------------
 
 
-async def _stream(url: str, body: bytes, headers: dict):
+async def _stream(resp: httpx.Response):
     states: dict[str, ContentTypeState] = {
         "content": ContentTypeState(),
         "reasoning_content": ContentTypeState(),
@@ -291,116 +291,108 @@ async def _stream(url: str, body: bytes, headers: dict):
     sse_id = None
     sse_object = None
 
-    async with httpx.AsyncClient(timeout=None) as client:
-        async with client.stream("POST", url, content=body, headers=headers) as resp:
-            async for line in resp.aiter_lines():
-                if resp.status_code != 200:
-                    # Read the full error body from the upstream
-                    error_content = await resp.aread()
-                    # Yield the error directly and return
-                    yield error_content.decode("utf-8")
-                    return
-                if not line:
-                    continue
-                if line == "data: [DONE]":
-                    yield line + "\n\n"
-                    return
-                if not line.startswith("data: "):
-                    yield line + "\n\n"
-                    continue
+    try:
+        async for line in resp.aiter_lines():
+            if not line:
+                continue
+            if line == "data: [DONE]":
+                yield line + "\n\n"
+                return
+            if not line.startswith("data: "):
+                yield line + "\n\n"
+                continue
 
-                payload = json.loads(line[6:])
-                if sse_id is None:
-                    sse_id = payload.get("id", "")
-                    sse_object = payload.get("object", "chat.completion.chunk")
+            payload = json.loads(line[6:])
+            if sse_id is None:
+                sse_id = payload.get("id", "")
+                sse_object = payload.get("object", "chat.completion.chunk")
 
-                if (
-                    "choices" not in payload
-                    or not payload["choices"]
-                    or "delta" not in payload["choices"][0]
-                ):
-                    yield line + "\n\n"
-                    continue
+            if (
+                "choices" not in payload
+                or not payload["choices"]
+                or "delta" not in payload["choices"][0]
+            ):
+                yield line + "\n\n"
+                continue
 
-                delta = payload["choices"][0]["delta"]
+            delta = payload["choices"][0]["delta"]
 
-                cur_type = None
-                if delta.get("content") is not None:
-                    cur_type = "content"
-                elif delta.get("reasoning_content") is not None:
-                    cur_type = "reasoning_content"
+            cur_type = None
+            if delta.get("content") is not None:
+                cur_type = "content"
+            elif delta.get("reasoning_content") is not None:
+                cur_type = "reasoning_content"
 
-                if cur_type is not None:
-                    # Flush partial_line on type switch
-                    if cur_type != last_type and last_type is not None:
-                        old = states[last_type]
-                        if old.partial_line:
-                            flush_p = _flush_payload(
-                                sse_id, sse_object, last_type, old.partial_line
+            if cur_type is not None:
+                # Flush partial_line on type switch
+                if cur_type != last_type and last_type is not None:
+                    old = states[last_type]
+                    if old.partial_line:
+                        flush_p = _flush_payload(
+                            sse_id, sse_object, last_type, old.partial_line
+                        )
+                        yield f"data: {json.dumps(flush_p)}\n\n"
+                    states[cur_type] = ContentTypeState()
+
+                state = states[cur_type]
+                text = delta[cur_type] or ""
+                emitted, arg_frags, is_finish = _process_content(text, state)
+                states[cur_type] = state
+
+                # --- TOOL CALL MODE: emit arg fragments, skip original delta ---
+                if state.mode == ContentTypeMode.TOOL_CALL_PARSING:
+                    fn_name = state.parser._function_name if state.parser else ""
+
+                    # Detect new function after previous function's args
+                    if state.tc_header_emitted and arg_frags and arg_frags[0] == "{":
+                        # Close previous function's arguments (Fixed nested double-quotes)
+                        yield f"data: {json.dumps(_tc_args_payload(sse_id, sse_object, state.tc_index, '}'))}\n\n"
+                        # Reset for new function
+                        state.parser.reset()
+                        state.tc_index += 1
+                        state.tool_id = "call_" + secrets.token_hex(16)
+                        state.tc_header_emitted = False
+                        state.prev_tc_closed = False
+
+                    for frag in arg_frags:
+                        if not state.tc_header_emitted:
+                            p = _tc_header_payload(
+                                sse_id,
+                                sse_object,
+                                state.tc_index,
+                                state.tool_id,
+                                fn_name,
+                                frag,
                             )
-                            yield f"data: {json.dumps(flush_p)}\n\n"
-                        states[cur_type] = ContentTypeState()
+                            state.tc_header_emitted = True
+                        else:
+                            p = _tc_args_payload(
+                                sse_id, sse_object, state.tc_index, frag
+                            )
+                        yield f"data: {json.dumps(p)}\n\n"
 
-                    state = states[cur_type]
-                    text = delta[cur_type] or ""
-                    emitted, arg_frags, is_finish = _process_content(text, state)
-                    states[cur_type] = state
+                    if is_finish:
+                        state.prev_tc_closed = True
+                        yield f"data: {json.dumps(_finish_payload(sse_id, sse_object))}\n\n"
+                        yield "data: [DONE]\n\n"
+                        return
 
-                    # --- TOOL CALL MODE: emit arg fragments, skip original delta ---
-                    if state.mode == ContentTypeMode.TOOL_CALL_PARSING:
-                        fn_name = state.parser._function_name if state.parser else ""
-
-                        # Detect new function after previous function's args
-                        if (
-                            state.tc_header_emitted
-                            and arg_frags
-                            and arg_frags[0] == "{"
-                        ):
-                            # Close previous function's arguments
-                            yield f"data: {json.dumps(_tc_args_payload(
-                                sse_id, sse_object, state.tc_index, "}")  )}\n\n"
-                            # Reset for new function
-                            state.parser.reset()
-                            state.tc_index += 1
-                            state.tool_id = "call_" + secrets.token_hex(16)
-                            state.tc_header_emitted = False
-                            state.prev_tc_closed = False
-
-                        for frag in arg_frags:
-                            if not state.tc_header_emitted:
-                                p = _tc_header_payload(
-                                    sse_id,
-                                    sse_object,
-                                    state.tc_index,
-                                    state.tool_id,
-                                    fn_name,
-                                    frag,
-                                )
-                                state.tc_header_emitted = True
-                            else:
-                                p = _tc_args_payload(
-                                    sse_id, sse_object, state.tc_index, frag
-                                )
-                            yield f"data: {json.dumps(p)}\n\n"
-
-                        if is_finish:
-                            state.prev_tc_closed = True
-                            yield f"data: {json.dumps(_finish_payload(sse_id, sse_object))}\n\n"
-                            yield "data: [DONE]\n\n"
-                            return
-
-                        last_type = cur_type
-                        continue  # skip yielding original payload
-
-                    # --- NORMAL MODE ---
-                    if emitted:
-                        delta[cur_type] = emitted
                     last_type = cur_type
-                    # Skip suppressed tokens (empty emitted = marker buffering)
-                    if not emitted:
-                        continue
+                    continue  # skip yielding original payload
 
-                yield f"data: {json.dumps(payload)}\n\n"
+                # --- NORMAL MODE ---
+                if emitted:
+                    delta[cur_type] = emitted
+                last_type = cur_type
+                # Skip suppressed tokens (empty emitted = marker buffering)
+                if not emitted:
+                    continue
+
+            yield f"data: {json.dumps(payload)}\n\n"
+
+    finally:
+        # Guarantee upstream connection gracefully cleans up after stream disconnects/finishes
+        await resp.aclose()
 
 
 # ---------------------------------------------------------------------------
@@ -423,9 +415,29 @@ async def proxy(request: Request, path: str):
     if request.method == "POST" and path == "v1/chat/completions" and body:
         data = json.loads(body)
         if data.get("stream"):
+            # 1. Connect to the upstream stream
+            req = _client.build_request(
+                request.method, url, content=body, headers=headers
+            )
+            resp = await _client.send(req, stream=True)
+
+            # 2. Check the response code immediately
+            if resp.status_code != 200:
+                await resp.aread()
+                content = resp.content
+                await resp.aclose()
+                # Return the error response verbatim, preserving status code
+                return Response(
+                    content=content,
+                    status_code=resp.status_code,
+                    media_type=resp.headers.get("content-type", "application/json"),
+                )
+
+            # 3. Stream successfully using standard HTTP SSE media type
             return StreamingResponse(
-                _stream(url, body, headers),
-                media_type="application/json",
+                _stream(resp),
+                status_code=resp.status_code,
+                media_type="text/event-stream",
             )
 
     resp = await _client.request(request.method, url, content=body, headers=headers)
