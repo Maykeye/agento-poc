@@ -29,9 +29,7 @@ class AgencyNode:
             print("(Skipped all tools)")
             return []
         sys = []
-        if self.lang == "rpg":
-            sys = [self._llm_rpg]
-        elif self.readonly:
+        if self.readonly:
             sys = [self._llm_reading]
         else:
             sys = [self._llm_reading, self._llm_editing]
@@ -56,15 +54,6 @@ class AgencyNode:
             llm.add_tool(external_tool)
         return llm
 
-    def _llm_rpg(self, llm: LLM):
-        llm.add_tool(tool_io.ToolReadFile())
-        llm.add_tool(tool_io.ToolSearchReplaceOnce())
-        llm.add_tool(tool_io.ToolWriteFile())
-        llm.add_tool(tool_io.ToolAppend())
-        llm.add_tool(tool_rpg.ToolRollDice())
-        llm.add_tool(tool_rpg.ToolRollCheck())
-        llm.add_tool(tool_rpg.ToolRollVersus())
-
     def _llm_editing(self, llm: LLM):
         llm.add_tool(tool_io.ToolDeleteFile())
         llm.add_tool(tool_io.ToolRename())
@@ -73,6 +62,7 @@ class AgencyNode:
         llm.add_tool(tool_io.ToolRmDir())
         llm.add_tool(tool_sh.ToolGitAdd())
         llm.add_tool(tool_io.ToolAppend())
+        llm.add_tool(tool_sh.ToolBash())
         llm.add_tool(tool_io.ToolWriteFile())
         if self.lang == "rust":
             llm.add_tool(tool_sh.ToolCargoAdd())

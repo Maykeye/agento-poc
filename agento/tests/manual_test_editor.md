@@ -3,7 +3,7 @@
 Stages to perform:
 
 0) If `editor_test.txt` exists, delete it.
-1) Enter edit mode. Using write_file there create a new sample file `editor_test.txt` with content
+1) Using write_file there create a new sample file `editor_test.txt` with content
 ```
 LINE01
 LINE02

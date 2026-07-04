@@ -69,6 +69,8 @@ To run particular, pass full classname to unittest, e.g. `agento.tests.test_foo.
 
 #### Sed tests
 - tests/test_sed.py
+#### Shell tools tests
+- tests/test_sh.py
 #### SQL tests
 - tests/test_tool_error.py
 #### Type coercion tests

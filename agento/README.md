@@ -48,19 +48,11 @@ You can send a notification to LLM: create file `/run/user/$(id -u)/agento.notif
 
 ## Tools
 
-The tools(for now) intentionally lack generic `bash`. All available shell commands (like `git add`, `cargo test` are passed as separate tools.).
-Don't confuse this is with a sandbox: technically model can create a `#[test]` that goes to `$HOME` and destroys everything.
-Practically it's anti-stupidity, not anti anti-attack.
-
-* Note, one of the tool is rust-api-helper, that exists in my other git repository. It basically prints API of everything inside `.rs` files.
-Like `cargo docs`, but for private methods too. (No treesitter support)
+Previously it was anti-llm-stupidity with no bash. No longer the way.
+Now tool is YOLO
 
 * One of the tool is `fork`. It forks(like `man 2 fork`) llm context, ask it to do an operation nicely and returns the result to the caller.
 It is not called on its own by models and shows no good result.
-
-### Folding.
-
-PoC. Folding tool allows model to hide lines from its context.
 
 ## Implementation note
 

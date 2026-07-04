@@ -178,6 +178,22 @@ class ToolAck(Tool):
         return run_executable(all_args)
 
 
+class ToolBash(Tool):
+    def __init__(self):
+        super().__init__(
+            "bash",
+            "Run `bash -c` command. Use this to execute shell commands. "
+            "For large output, pipe through `tail` to limit lines (e.g., `abc | tail -n20` "
+            "to show only last 20 lines). Accepts a single string command.",
+        )
+
+    def __call__(
+        self,
+        command: Annotated[str, "bash command as a single string"],
+    ):
+        return run_executable(["bash", "-c", command])
+
+
 # TODO: promoto to the tool one day
 def rustfmt():
     """Run rust fmt"""
