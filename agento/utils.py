@@ -10,6 +10,15 @@ import time
 TEMP_DIR = Path(os.getenv("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}") + "/.agento")
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
+"""Default ininitial external tools"""
+
+
+def import_tools(path: str):
+    globals = {}
+    txt = Path(f"{CONFIG.project_directory}/{path.strip()}").read_text()
+    exec(txt, globals)
+    globals["import_tools"](CONFIG.external_tools)
+
 
 def delta_time_str(_cache: list = [time.perf_counter()]):
     elapsed = (time.perf_counter() - _cache[0]) / 60.0
@@ -37,6 +46,7 @@ def expand_file(prompt_file: str, used_files: Optional[set[str]] = None, done=Fa
             continue
         if cmd(line, "@done") is not None:
             done = True
+            continue
         elif cmd(line, "@eof") is not None:
             break
         elif lang := cmd(line, "@lang "):
@@ -44,12 +54,18 @@ def expand_file(prompt_file: str, used_files: Optional[set[str]] = None, done=Fa
             print(f"Forced langauge: {lang}")
             CONFIG.forced_language = True
             CONFIG.language = lang
+            continue
         elif include := cmd(line, "@read "):
             out = expand_file(include, used_files, done)
             new += [out]
+            continue
         elif project := cmd(line, "@project_dir "):
             CONFIG.project_directory = Path(project).resolve()
             print(f"Project directory: {CONFIG.project_directory}")
+            continue
+        elif tool := cmd(line, "@import_tools "):
+            import_tools(tool)
+            continue
         elif line.startswith("@#"):  # commentary
             continue
         elif line.startswith("@"):

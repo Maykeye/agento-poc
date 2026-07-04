@@ -1,5 +1,5 @@
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -9,6 +9,7 @@ class Config:
     project_directory: Path
     logging_sqlite_path: Path
     read_only_files: list
+    external_tools: list = field(default_factory=list)
 
     def guess_project_language(self) -> str:
         files = list(self.project_directory.glob("*"))

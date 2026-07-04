@@ -8,7 +8,7 @@ from agento.config import CONFIG
 from agento.llm import LLM
 from agento.utils import expand_file, format_duration
 from agento.utilsql import log_prompt
-from agento.tool import io as tool_io
+from agento.tool import Tool, io as tool_io
 import agento.tool as tool
 import agento.tool.rpg as tool_rpg
 import agento.tool.fork as tool_fork
@@ -51,6 +51,9 @@ class AgencyNode:
             llm.add_tool(tool.ToolDebugPing())
             llm.add_tool(tool.ToolDebugEcho())
             llm.add_tool(tool.ToolDebugAdd())
+        for external_tool in CONFIG.external_tools:
+            assert isinstance(external_tool, Tool)
+            llm.add_tool(external_tool)
         return llm
 
     def _llm_rpg(self, llm: LLM):
@@ -117,6 +120,14 @@ def main():
     CONFIG.language = CONFIG.guess_project_language()
     prompt = expand_file(filename)
     assert CONFIG.project_directory.is_dir(), "set @project_dir in prompt"
+    # sync tools
+    tools = CONFIG.external_tools
+    assert all(isinstance(tool, Tool) for tool in tools)
+    assert len(tools) == len(set([t.name for t in tools])), "non-unique names"
+    print(
+        f"Extern tools: {len(tools)}",
+        [t.name for t in tools],
+    )
 
     log_prompt(str(CONFIG.project_directory), prompt)
 

@@ -1,0 +1,4 @@
+@project_dir .
+@import_tools manual_tool.py
+
+Hello. Please call test_external_api.
