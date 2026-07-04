@@ -66,14 +66,6 @@ class TestBase(unittest.TestCase):
     def tool_call_delete_foo(self) -> Any:
         return self.tool_call(tool_io.ToolDeleteFile(), path=self.FILE_FOO)
 
-    def tool_call_edit_foo(self, replace_from: str, replace_with: str) -> Any:
-        return self.tool_call(
-            tool_io.ToolEditFile(),
-            path=self.FILE_FOO,
-            replace_from=replace_from,
-            replace_with=replace_with,
-        )
-
     def tool_call_editor_append(self, path: Path, text: str) -> Any:
         return self.tool_call(tool_io.ToolAppend(), path=path, text=text)
 

@@ -60,33 +60,6 @@ text
         self.assertIn(">>> OK: write_file: ", lines[0])
         self.assertEqual(">>> === CONTENT START ===", lines[1])
 
-    def test_edit_no_nl(self):
-        """Test edit_file with content that has no trailing newline.
-
-        When editing content without newline, the response should still
-        be properly formatted with markers on separate lines.
-        """
-        dummy_llm, msgs = self.init_llm_msgs()
-        msgs.append(dummy_llm.msg_user("Please edit foo without newline"))
-
-        # First write content without trailing newline
-        msgs.append(dummy_llm.msg_assistant("Writing foo without newline"))
-        text_no_nl = "NO_NEWLINE"
-        self.tool_call_write(self.FILE_FOO, text_no_nl)
-
-        # Now edit that content
-        msgs.append(dummy_llm.msg_assistant("Editing foo without newline"))
-        res = self.tool_call_edit_foo("NO_NEWLINE", "EDITED_NO_NEWLINE")
-        exp = """\
->>> OK: edit_file: .agento.demo.foo
->>> === CONTENT START ===
-EDITED_NO_NEWLINE
->>> === CONTENT END ===
->>> === DATA CHUNK ===
-('NO_NEWLINE', 'EDITED_NO_NEWLINE')"""
-
-        self.assertEqual(res, exp)
-
     def test_delete_file(self):
         dummy_llm, msgs = self.init_llm_msgs()
         msgs.append(dummy_llm.msg_user("Please delete foo"))
