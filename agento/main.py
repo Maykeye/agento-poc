@@ -6,7 +6,6 @@ from typing import Optional
 
 from agento.config import CONFIG
 from agento.llm import LLM
-import agento.tool.editor as tool_editor
 from agento.utils import expand_file, format_duration
 from agento.utilsql import log_prompt
 from agento.tool import io as tool_io
@@ -14,7 +13,7 @@ import agento.tool as tool
 import agento.tool.rpg as tool_rpg
 import agento.tool.fork as tool_fork
 import agento.tool.sh as tool_sh
-from agento.context import set_context_mode, context_handler, ContextMode
+from agento.context import set_context_mode, ContextMode
 
 
 class AgencyNode:
@@ -36,7 +35,6 @@ class AgencyNode:
             sys = [self._llm_reading]
         else:
             sys = [self._llm_reading, self._llm_editing]
-        sys += [self._llm_fold]
         return sys
 
     @property
@@ -57,7 +55,7 @@ class AgencyNode:
 
     def _llm_rpg(self, llm: LLM):
         llm.add_tool(tool_io.ToolReadFile())
-        llm.add_tool(tool_io.ToolEditFile())
+        llm.add_tool(tool_io.ToolSearchReplaceOnce())
         llm.add_tool(tool_io.ToolWriteFile())
         llm.add_tool(tool_io.ToolAppend())
         llm.add_tool(tool_rpg.ToolRollDice())
@@ -65,26 +63,18 @@ class AgencyNode:
         llm.add_tool(tool_rpg.ToolRollVersus())
 
     def _llm_editing(self, llm: LLM):
-        # llm.add_tool(tool_io.ToolWriteFile())
-        # llm.add_tool(tool_io.ToolEditFile())
-        llm.add_tool(tool_editor.ToolEditor())
         llm.add_tool(tool_io.ToolDeleteFile())
         llm.add_tool(tool_io.ToolRename())
+        llm.add_tool(tool_io.ToolSearchReplaceOnce())
         llm.add_tool(tool_io.ToolMkDir())
         llm.add_tool(tool_io.ToolRmDir())
         llm.add_tool(tool_sh.ToolGitAdd())
         llm.add_tool(tool_io.ToolAppend())
+        llm.add_tool(tool_io.ToolWriteFile())
         if self.lang == "rust":
             llm.add_tool(tool_sh.ToolCargoAdd())
 
-    def _llm_fold(self, llm: LLM):
-        if context_handler().mode() == ContextMode.SUFFIX:
-            llm.add_tool(tool_io.ToolFoldAdd())
-            llm.add_tool(tool_io.ToolUnfold())
-            llm.add_tool(tool_io.ToolUnfoldAll())
-
     def _llm_reading(self, llm: LLM):
-        llm.add_tool(tool_io.ToolCloseFile())
         llm.add_tool(tool_io.ToolReadFile())
         llm.add_tool(tool_io.ToolLs())
         if self.lang == "rust":
@@ -113,7 +103,7 @@ class AgencyNode:
 
 def main():
     start = time.monotonic()
-    set_context_mode(ContextMode.SUFFIX)  # TODO: add to @config?
+    set_context_mode(ContextMode.RAW)  # TODO: add to @config?
 
     # Parse initial prompt file
     assert len(sys.argv) == 2

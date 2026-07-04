@@ -1,11 +1,2 @@
-- (fork) disable file sharing
-- (editor) command sed. Run sed script through file. Accept/reject
-- (editor) cleanup. Tools use id(llm) to get state, which is not abstract enough
-- command template_fork: provide common_instruction and array of instruction, e.g. 
-    {common_instruction: "Process a file", forks: ["a.c", "b.c"]}
-- In edit mode, mention that first |-pipe  character on each line is a marker of start of the source code line
-- command @query workspace topic --- ask anythingllm 
-- command @assistant fake assistant message
-- command @tool-read fakes sending read command (after which true response is appended)
-- Editor/patch: ensure header is a/ and b/ either through documentation or force
-
+- remove suffix context
+- KISS context but slightly harder than raw

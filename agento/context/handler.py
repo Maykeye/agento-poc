@@ -1,6 +1,5 @@
 from agento.context.context_handler import ContextMode, ContextEntry, ContextHandler
 from agento.context.raw import RawHandler
-from agento.context.suffix import SuffixHandler
 
 
 def set_context_mode(value: ContextMode, reset_ctx_id=False):
@@ -10,8 +9,6 @@ def set_context_mode(value: ContextMode, reset_ctx_id=False):
     match value:
         case ContextMode.RAW:
             _CONTEXT_HANDLER = RawHandler()
-        case ContextMode.SUFFIX:
-            _CONTEXT_HANDLER = SuffixHandler()
 
 
 _CONTEXT_HANDLER: ContextHandler = RawHandler()

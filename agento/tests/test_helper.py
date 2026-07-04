@@ -6,7 +6,6 @@ import shutil
 
 from agento.config import CONFIG
 from agento.tool import Tool
-from agento.tool.editor.editor import EditorEntry, ToolEditor
 from agento.tool import io as tool_io
 from agento import utilsql
 from agento.context import context_handler, ContextMode, set_context_mode
@@ -39,7 +38,6 @@ class TestBase(unittest.TestCase):
         CONFIG.project_directory = tmpfilename("")
         CONFIG.logging_sqlite_path = Path(":memory:")
         utilsql.reset_all_caches()
-        ToolEditor.reset()
         LLM.INSTANCES.clear()
         self.FILE_FOO.write_text("foo\ntext")
         self.FILE_BAR.write_text("bar\nvalue")
@@ -75,50 +73,6 @@ class TestBase(unittest.TestCase):
             replace_from=replace_from,
             replace_with=replace_with,
         )
-
-    def tool_call_add_fold(
-        self,
-        path: Path,
-        fold_from_line_num: int,
-        fold_from_line: str,
-        fold_to_line_num: int,
-        fold_to_line: str,
-        name: str,
-    ) -> Any:
-        """Call the file_add_fold tool using the implementation class (line numbers)."""
-        return self.tool_call(
-            tool_io.ToolFoldAddImpl(),
-            path=path,
-            fold_from_line_num=fold_from_line_num,
-            fold_from_line=fold_from_line,
-            fold_to_line=fold_to_line,
-            fold_to_line_num=fold_to_line_num,
-            name=name,
-        )
-
-    def tool_call_add_fold_regex(
-        self,
-        path: Path,
-        start_pattern: str,
-        end_pattern: str,
-        name: str,
-    ) -> Any:
-        """Call the file_add_fold tool with regex patterns (new API)."""
-        return self.tool_call(
-            tool_io.ToolFoldAdd(),
-            path=path,
-            start_pattern=start_pattern,
-            end_pattern=end_pattern,
-            name=name,
-        )
-
-    def tool_call_unfold(self, path, name: str):
-        """Call the file_unfold tool."""
-        return self.tool_call(tool_io.ToolUnfold(), path=path, name=name)
-
-    def tool_call_unfold_all(self, path):
-        """Call the file_unfold_all tool."""
-        return self.tool_call(tool_io.ToolUnfoldAll(), path=path)
 
     def tool_call_editor_append(self, path: Path, text: str) -> Any:
         return self.tool_call(tool_io.ToolAppend(), path=path, text=text)
@@ -206,39 +160,3 @@ class TestBase(unittest.TestCase):
         dummy_llm.add_tool(tool_io.ToolReadFile())
         msgs = dummy_llm.INSTANCES[-1].messages
         return (dummy_llm, msgs)
-
-    def init_editor_llm(self) -> int:
-        """Initialize an LLM in editor mode for the test file.
-
-        Returns:
-            llm_id
-        """
-        # TODO: the same as in test_editor, need to merge
-        # Create main LLM
-        main_llm = LLM()
-        main_llm.INSTANCES.append(LlmInstace(main_llm, []))
-        main_msgs = main_llm.INSTANCES[-1].messages
-        main_msgs.append(main_llm.msg_user("Test editor operations"))
-        self.tool_call_read(self.FILE_FOO)
-
-        # Create editor LLM (simulating what ToolEditor.__call__ does)
-        editor_llm = main_llm.clone()
-        editor_llm.tools.clear()
-
-        # Add editor tools
-        ToolEditor.init_editor_tools(editor_llm)
-
-        # Set up editor state
-        llm_id = id(editor_llm)
-        ToolEditor._state[llm_id] = EditorEntry(self.FILE_FOO.name)
-
-        # Prepare messages
-        editor_msgs = main_llm.messages() + [
-            main_llm.msg_system("Editor mode system"),
-            main_llm.msg_user(f"Editing {self.FILE_FOO.name}"),
-        ]
-
-        # Register this as current instance
-        editor_llm.INSTANCES.append(LlmInstace(editor_llm, editor_msgs))
-
-        return llm_id

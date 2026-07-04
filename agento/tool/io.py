@@ -6,8 +6,6 @@ import re
 
 from agento.config import real_path, READ_ONLY_ERROR, CONFIG
 from agento.context import ContextMode, context_handler
-from agento.context import llm_instance
-from agento.context.suffix import SuffixHandler
 from agento.tool import Tool
 
 # TODO: import logging.basicConfig(level=logging.INFO)
@@ -177,14 +175,6 @@ class ToolWriteFile(Tool):
         if p in CONFIG.read_only_files:
             return {path: "error", "error": READ_ONLY_ERROR}
 
-        # Check if there are any folds on this file
-        handler = context_handler()
-        if handler.has_folds(path):
-            return {
-                path: "error",
-                "error": f"Cannot write file with active folds. Use file_unfold or file_unfold_all first.",
-            }
-
         if p.exists() and not p.is_file():
             return {path: "error", "error": f"File exists, but it is not a file"}
 
@@ -207,41 +197,8 @@ class ToolDeleteFile(Tool):
         if not p.exists():
             return {path: "error", "error": f"File does't exist"}
 
-        ToolUnfoldAll()(path)
         p.unlink()
         return context_handler().update(path, "(file deleted)", "delete_file")
-
-
-class ToolCloseFile(Tool):
-    def __init__(self):
-        super().__init__(
-            "close_file",
-            "Close files that was previously opened/read. Removes them from active context or marks it as closed with a reason. Use this when you're done with file to free up context space. Close as many files as possible",
-        )
-
-    def __call__(
-        self,
-        reason: Annotated[
-            str,
-            "Reason for closing the file (e.g., 'done editing', 'no longer needed')",
-        ],
-        files: Annotated[list[str], "Path to the file to close"],
-    ):
-        """Close a file in the current context mode.
-
-        Args:
-            file: Path to the file to close
-            reason: Reason for closing the file
-
-        Returns:
-            Success message from context handler
-        """
-
-        context = ""
-        for file in files:
-            context += str(context_handler().close_file(file, reason, llm_instance()))
-            context += "\n"
-        return context
 
 
 class ToolMkDir(Tool):
@@ -287,7 +244,7 @@ class ToolRmDir(Tool):
         return {path: "ok", "desc": f"Folder deleted"}
 
 
-class ToolEditFile(Tool):
+class ToolSearchReplaceOnce(Tool):
     def __init__(self):
         super().__init__(
             "search_replace_once",
@@ -310,258 +267,24 @@ class ToolEditFile(Tool):
         old_text = p.read_text()
         handler = context_handler()
 
-        # If file has folds, we need to check uniqueness in visible content only
-        if handler.has_folds(path):
-            # Validate that the edit target is visible and unique in visible content
-            is_valid, error_msg = handler.validate_edit_in_visible_content(
-                path, replace_from
-            )
-            if not is_valid:
-                return {path: "error", "error": error_msg}
-
-            # Text exists exactly once in visible content - proceed with edit
-            # First, check if text exists in the actual file (already validated above)
-            idx1 = old_text.find(replace_from)
-            if idx1 == -1:
-                return {path: "error", "error": f"Can not find `{repr(replace_from)}`"}
-
-            # Replace only the first occurrence (which is in visible content)
-            new_text = old_text.replace(replace_from, replace_with, 1)
-        else:
-            # No folds - use traditional uniqueness check
-            idx1 = old_text.find(replace_from)
-            if idx1 == -1:
-                return {path: "error", "error": f"Can not find `{repr(replace_from)}`"}
-            idx2 = old_text.find(replace_from, idx1 + len(replace_from))
-            if idx2 != -1:
-                return {
-                    path: "error",
-                    "error": f"`{repr(replace_from)}` must exists exactly once",
-                }
-            new_text = old_text.replace(replace_from, replace_with)
+        idx1 = old_text.find(replace_from)
+        if idx1 == -1:
+            return {path: "error", "error": f"Can not find `{repr(replace_from)}`"}
+        idx2 = old_text.find(replace_from, idx1 + len(replace_from))
+        if idx2 != -1:
+            return {
+                path: "error",
+                "error": f"`{repr(replace_from)}` must exists exactly once",
+            }
+        new_text = old_text.replace(replace_from, replace_with)
 
         # Write the new text to the file
         p.write_text(new_text)
-
-        # Update fold line numbers if the edit changed the line count
-        old_line_count = len(old_text.splitlines())
-        new_line_count = len(new_text.splitlines())
-        if handler.has_folds(path):
-            handler.update_fold_line_numbers(path, old_line_count, new_line_count)
 
         # Update the context with new content
         return handler.update(
             path, new_text, "edit_file", edit_chunk=(replace_from, replace_with)
         )
-
-
-class ToolFoldAddImpl(Tool):
-    def __init__(self):
-        super().__init__(
-            "file_add_fold_impl",
-            "INTERNAL: Add a fold using line numbers (implementation class). Use ToolFoldAdd for regex-based folding instead.",
-        )
-
-    def __call__(
-        self,
-        path: Annotated[str, "Project path to add fold to"],
-        fold_from_line_num: Annotated[
-            int, "Line number to start fold from (1-indexed)"
-        ],
-        fold_from_line: Annotated[
-            str, "Textual representation of line fold_from_line_num (for validation)"
-        ],
-        fold_to_line_num: Annotated[int, "Line number to end fold at (1-indexed)"],
-        fold_to_line: Annotated[
-            str, "Textual representation of line fold_to_line_num (for validation)"
-        ],
-        name: Annotated[str, "Unique name/description for this fold"],
-    ):
-        return context_handler().add_fold(
-            path,
-            fold_from_line_num,
-            fold_from_line,
-            fold_to_line_num,
-            fold_to_line,
-            name,
-        )
-
-
-class ToolFoldAdd(Tool):
-    def __init__(self):
-        super().__init__(
-            "file_add_fold",
-            """Add a fold to hide file content in the LLM context using regex patterns.
-
-SPECIFICATION:
-- Use regex patterns to identify the start and end of the region to fold.
-- Multiline patterns are supported and encouraged for more reliable matching.
-- The start pattern must match exactly once in the VISIBLE (non-folded) content.
-- The end pattern must match exactly once AFTER the start pattern match.
-- The fold region (start..end) must not overlap with existing folds.
-
-LINE NUMBER RULES:
-- If the start pattern matches multiple lines, the fold starts from the FIRST matching line.
-- If the end pattern matches multiple lines, the fold ends at the LAST matching line.
-
-EXAMPLES:
-1. Single line patterns:
-   start_pattern="def my_function\\(", end_pattern="^    pass$"
-
-2. Multiline patterns (recommended for reliability):
-   start_pattern="def my_function\\([^)]*\\):\\s*\\n\\s*\"\"\"",
-   end_pattern="\"\"\"\\s*\\n\\n"
-
-When lines are folded, `FOLD: lines N..M (description)` will be displayed where N and M are real line numbers. Use them for counting further folding.""",
-        )
-
-    def __call__(
-        self,
-        path: Annotated[str, "Project path to add fold to"],
-        start_pattern: Annotated[
-            str,
-            "Regex pattern to match the START of the region to fold. Must match exactly once in visible content. For multiline patterns, folding starts from the first matching line.",
-        ],
-        end_pattern: Annotated[
-            str,
-            "Regex pattern to match the END of the region to fold. Must match exactly once AFTER the start. For multiline patterns, folding ends at the last matching line.",
-        ],
-        name: Annotated[str, "Unique name/description for this fold"],
-    ):
-
-        handler = context_handler()
-
-        if not isinstance(handler, SuffixHandler):
-            return {"error": "operation not supported in current agent mode"}
-
-        if path not in handler.file_entries():
-            return {
-                path: "error",
-                "error": f"File {path} has not been read. Read it first with read_file.",
-            }
-
-        # Get the full file content
-        full_text = handler.file_entries()[path].text
-        full_lines = full_text.splitlines()
-
-        # Get visible content (with folds applied)
-        visible_text = handler.format_folded_content(path, full_text)
-
-        # Compile patterns
-        try:
-            start_re = re.compile(start_pattern, re.MULTILINE)
-        except re.error as e:
-            return {path: "error", "error": f"Invalid start_pattern regex: {e}"}
-
-        try:
-            end_re = re.compile(end_pattern, re.MULTILINE)
-        except re.error as e:
-            return {path: "error", "error": f"Invalid end_pattern regex: {e}"}
-
-        # Find start pattern in visible content
-        start_matches = list(start_re.finditer(visible_text))
-        if len(start_matches) == 0:
-            return {
-                path: "error",
-                "error": f"start_pattern `{start_pattern}` not found in visible content",
-            }
-        if len(start_matches) > 1:
-            return {
-                path: "error",
-                "error": f"start_pattern `{start_pattern}` matches {len(start_matches)} times in visible content (must match exactly once)",
-            }
-        start_match = start_matches[0]
-
-        # Find end pattern AFTER start match in visible content
-        search_after_start = visible_text[start_match.start() :]
-        end_matches = list(end_re.finditer(search_after_start))
-        if len(end_matches) == 0:
-            return {
-                path: "error",
-                "error": f"end_pattern `{end_pattern}` not found after start_pattern in visible content",
-            }
-        if len(end_matches) > 1:
-            return {
-                path: "error",
-                "error": f"end_pattern `{end_pattern}` matches {len(end_matches)} times after start (must match exactly once)",
-            }
-        end_match = end_matches[0]
-
-        # Calculate visible line numbers for start and end
-        # Start: first line of start match
-        start_visible_line = visible_text[: start_match.start()].count("\n") + 1
-
-        # End: last line of end match (in the search_after_start context)
-        # end_match.end() is relative to search_after_start
-        absolute_end_pos = start_match.start() + end_match.end()
-        end_visible_line = visible_text[:absolute_end_pos].count("\n") + 1
-
-        # Map visible line numbers to actual file line numbers using context handler
-        start_actual_line = handler.visible_to_actual(
-            path, start_visible_line, full_text
-        )
-        end_actual_line = handler.visible_to_actual(path, end_visible_line, full_text)
-
-        # Get the actual line content for validation
-        start_actual_line_idx = start_actual_line - 1
-        end_actual_line_idx = end_actual_line - 1
-
-        if start_actual_line_idx < 0 or start_actual_line_idx >= len(full_lines):
-            return {
-                path: "error",
-                "error": f"Calculated start line {start_actual_line} is out of bounds",
-            }
-        if end_actual_line_idx < 0 or end_actual_line_idx >= len(full_lines):
-            return {
-                path: "error",
-                "error": f"Calculated end line {end_actual_line} is out of bounds",
-            }
-
-        start_line_content = full_lines[start_actual_line_idx]
-        end_line_content = full_lines[end_actual_line_idx]
-
-        # Call the implementation class with computed line numbers
-        impl = ToolFoldAddImpl()
-        return impl(
-            path=path,
-            fold_from_line_num=start_actual_line,
-            fold_from_line=start_line_content,
-            fold_to_line_num=end_actual_line,
-            fold_to_line=end_line_content,
-            name=name,
-        )
-
-
-class ToolUnfold(Tool):
-    def __init__(self):
-        super().__init__(
-            "file_unfold",
-            "Remove a specific fold by name from a file.",
-        )
-
-    def __call__(
-        self,
-        path: Annotated[str, "Project path to unfold"],
-        name: Annotated[str, "Name of the fold to remove"],
-    ):
-        return context_handler().unfold(path, name)
-
-
-class ToolUnfoldAll(Tool):
-    def __init__(self):
-        super().__init__(
-            "file_unfold_all",
-            "Remove all folds from a file.",
-        )
-
-    def __call__(
-        self,
-        path: Annotated[str, "Project path to unfold all"],
-    ):
-        handler = context_handler()
-
-        result = handler.unfold_all(path)
-        return result
 
 
 class ToolRename(Tool):
@@ -599,4 +322,4 @@ class ToolRename(Tool):
         p_src.rename(p_dst)
 
         # Update context with LLM for suffix mode message updates
-        return context_handler().rename_file(path_src, path_dst, llm_instance())
+        return context_handler().update(path_src, path_dst, "rename")
