@@ -38,21 +38,11 @@ Example can be seen in ./tests/manual_test_fork.md, ./tests/manual_test_editor.m
 ## Notification file
 You can send a notification to LLM: create file `/run/user/$(id -u)/agento.notification`. If this file is not empty, its content will be sent as external notification to LLM on next tool call. File will be deleted.
 
-## Context mode 
-
-* Context-mode. Currently file operation supports three kinds of operation: 
-
-    * Raw, if simple as it can -- when model ask to read the file, it is being read. If model asks it to be read again, it is being read again, then in messages there are 2 versions of the file.
-    * Prefix mode. First message from user is "file context". It contains content of files being operated on so far. If the same file read twice, the context will contains only one, latest version of the content. It often confuses qwen-35B. Not recommended.
-    * Suffix model. Rewrites old versions of the file. For example if tool read `foo.txt`, then decided to edit it, first read will be removed and in edit answer whole file will be output.
-
 ## Tools
 
-Previously it was anti-llm-stupidity with no bash. No longer the way.
-Now tool is YOLO
+Goal is to be yet another YOLO. Most initial tools were removed.
 
-* One of the tool is `fork`. It forks(like `man 2 fork`) llm context, ask it to do an operation nicely and returns the result to the caller.
-It is not called on its own by models and shows no good result.
+From special one left only is `fork` to run around, but it's disabled.
 
 ## Implementation note
 
