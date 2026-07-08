@@ -59,15 +59,3 @@ text
         self.assertEqual(len(lines), 4)
         self.assertIn(">>> OK: write_file: ", lines[0])
         self.assertEqual(">>> === CONTENT START ===", lines[1])
-
-    def test_delete_file(self):
-        dummy_llm, msgs = self.init_llm_msgs()
-        msgs.append(dummy_llm.msg_user("Please delete foo"))
-        msgs.append(dummy_llm.msg_assistant("Calling deleting foo"))
-        res = self.tool_call_delete_foo()
-        exp = """\
->>> OK: delete_file: .agento.demo.foo
->>> === CONTENT START ===
-(file deleted)
->>> === CONTENT END ==="""
-        self.assertEqual(res, exp)

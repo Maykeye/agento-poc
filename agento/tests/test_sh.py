@@ -16,8 +16,7 @@ class TestBash(unittest.TestCase):
         # Create a sequence of numbers and get last 2
         result = tool(command="seq 1 10 | tail -n2")
         self.assertEqual(result["exitcode"], 0)
-        self.assertIn("9", result["stdout"])
-        self.assertIn("10", result["stdout"])
+        self.assertIn("9\n10", result["stdout"])
 
     def test_bash_ls(self):
         """Test ls command"""

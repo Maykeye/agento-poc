@@ -206,7 +206,6 @@ def run_executable(args: list[str], stdin_text: Optional[str] = None):
             )
         else:
             with empty_stdin() as stdin:
-                print(args)
                 p = subprocess.run(
                     args, capture_output=True, text=True, stdin=stdin, env=env
                 )
